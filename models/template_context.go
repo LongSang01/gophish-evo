@@ -2,10 +2,15 @@ package models
 
 import (
 	"bytes"
+	"encoding/base64"
+	"fmt"
 	"net/mail"
 	"net/url"
 	"path"
 	"text/template"
+
+	log "github.com/gophish/gophish/logger"
+	"github.com/skip2/go-qrcode"
 )
 
 // TemplateContext is an interface that allows both campaigns and email
@@ -24,6 +29,8 @@ type PhishingTemplateContext struct {
 	TrackingURL string
 	RId         string
 	BaseURL     string
+	QRCode      string
+	phishURL    string
 	BaseRecipient
 }
 
@@ -61,14 +68,25 @@ func NewPhishingTemplateContext(ctx TemplateContext, r BaseRecipient, rid string
 	trackingURL.Path = path.Join(trackingURL.Path, "/track")
 	trackingURL.RawQuery = q.Encode()
 
+	// Generate QR code for phishing URL
+	qrCode, err := qrcode.New(phishURL.String(), qrcode.Medium)
+	if err != nil {
+		log.Fatal(err)
+	}
+	pngBytes, _ := qrCode.PNG(256)
+	base64QRCode := base64.StdEncoding.EncodeToString(pngBytes)
+	imgSrc := fmt.Sprintf("data:image/png;base64,%s", base64QRCode)
+
 	return PhishingTemplateContext{
 		BaseRecipient: r,
 		BaseURL:       baseURL.String(),
 		URL:           phishURL.String(),
 		TrackingURL:   trackingURL.String(),
+		phishURL:      phishURL.String(),
 		Tracker:       "<img alt='' style='display: none' src='" + trackingURL.String() + "'/>",
 		From:          fn,
 		RId:           rid,
+		QRCode:        "<img alt='QRCode' src='" + imgSrc + "'/>",
 	}, nil
 }
 
