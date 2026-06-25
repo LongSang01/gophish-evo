@@ -2,22 +2,22 @@
 <div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
     <div class="row">
         <h1 class="page-header">
-            Campaigns
+            任务
         </h1>
     </div>
     <div id="flashes" class="row"></div>
     <div class="row">
         <button type="button" class="btn btn-primary" data-toggle="modal" data-backdrop="static" data-target="#modal"
             onclick="edit('new')">
-            <i class="fa fa-plus"></i> New Campaign</button>
+            <i class="fa fa-plus"></i> 新建任务</button>
     </div>
     &nbsp;
 
     <ul class="nav nav-tabs" role="tablist">
         <li class="active" role="activeCampaigns"><a href="#activeCampaigns" aria-controls="activeCampaigns" role="tab"
-                data-toggle="tab">Active Campaigns</a></li>
+                data-toggle="tab">进行中的任务</a></li>
         <li role="archivedCampaigns"><a href="#archivedCampaigns" aria-controls="archivedCampaigns" role="tab"
-                data-toggle="tab">Archived Campaigns</a></li>
+                data-toggle="tab">已完成的任务</a></li>
     </ul>
     </br>
     <div class="tab-content">
@@ -29,7 +29,7 @@
             </div>
             <div id="emptyMessage" class="row" style="display:none;">
                 <div class="alert alert-info">
-                    No campaigns created yet. Let's create one!
+                    还没有任务，快来创建一个吧！
                 </div>
             </div>
             <div class="row">
@@ -52,16 +52,16 @@
             <div id="emptyMessage" class="row" style="display:none;">
                 </br>
                 <div class="alert alert-info">
-                    No archived campaigns.
+                    没有已完成的任务。
                 </div>
             </div>
             <div class="row">
                 <table id="campaignTableArchive" class="table" style="display:none;">
                     <thead>
                         <tr>
-                            <th class="col-md-3">Name</th>
-                            <th class="col-md-4">Created Date</th>
-                            <th class="col-md-2">Status</th>
+                            <th class="col-md-3">名称</th>
+                            <th class="col-md-4">创建时间</th>
+                            <th class="col-md-2">状态</th>
                             <th class="col-md-3 no-sort"></th>
                         </tr>
                     </thead>
@@ -80,38 +80,38 @@
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close" onclick="dismiss()">
                     <span aria-hidden="true">&times;</span>
                 </button>
-                <h4 class="modal-title" id="campaignModalLabel">New Campaign</h4>
+                <h4 class="modal-title" id="campaignModalLabel">新建任务</h4>
             </div>
             <div class="modal-body" id="modal_body">
                 <div class="row" id="modal.flashes"></div>
                 <div class="form-group">
-                    <label for="name">Name:</label>
-                    <input type="text" class="form-control" id="name" placeholder="Campaign name" autofocus>
-                    <label class="control-label" for="template">Email Template:</label>
+                    <label for="name">名称：</label>
+                    <input type="text" class="form-control" id="name" placeholder="任务名称" autofocus>
+                    <label class="control-label" for="template">邮件模板：</label>
                     <select class="form-control" placeholder="Template Name" id="template" />
                     <option></option>
                     </select>
-                    <label class="control-label" for="page">Landing Page:</label>
+                    <label class="control-label" for="page">落地页面：</label>
                     <select class="form-control" placeholder="Landing Page" id="page" />
                     <option></option>
                     </select>
-                    <label class="control-label" for="url">URL:
-                        <i class="fa fa-question-circle" data-toggle="tooltip" data-placement="right" title="Location of Gophish listener (must be reachable by targets!)"></i>
+                    <label class="control-label" for="url">URL：
+                        <i class="fa fa-question-circle" data-toggle="tooltip" data-placement="right" title="Gophish 监听器地址（目标必须可访问！）"></i>
                     </label>
                     <input type="text" class="form-control" placeholder="http://192.168.1.1" id="url" />
                     <div class="row">
                         <div class="col-md-6">
-                            <label class="control-label" for="url">Launch Date </label>
+                            <label class="control-label" for="url">启动时间 </label>
                             <input type="text" class="form-control" id="launch_date" />
                         </div>
                         <div class="col-md-6">
-                            <label class="control-label" for="delay">Send Emails By (Optional)
-                                <i class="fa fa-question-circle" data-toggle="tooltip" data-placement="right" title="If specified, Gophish will send emails evenly between the campaign launch and this date."></i>
+                            <label class="control-label" for="delay">发送截止时间（可选）
+                                <i class="fa fa-question-circle" data-toggle="tooltip" data-placement="right" title="设置后，邮件将在任务启动与此日期之间均匀发送。"></i>
                             </label>
                             <input type="text" class="form-control" id="send_by_date" autocomplete="random-data"/> <!--Chrome ignores autocomplete="off".-->
                         </div>
                     </div>
-                    <label class="control-label" for="profile">Sending Profile:</label>
+                    <label class="control-label" for="profile">发件箱配置：</label>
                     <div class="input-group">
                         <select class="form-control" placeholder="Sending Profile" id="profile" />
                         <option></option>
@@ -119,17 +119,17 @@
                         <span class="input-group-btn">
                             <button type="button" data-toggle="modal" data-backdrop="static" data-target="#sendTestEmailModal"
                                 class="btn btn-primary button">
-                                <i class="fa fa-envelope"></i> Send Test Email</button>
+                                <i class="fa fa-envelope"></i> 发送测试邮件</button>
                         </span>
                     </div>
-                    <label class="control-label" for="users">Groups:</label>
+                    <label class="control-label" for="users">目标组：</label>
                     <select class="form-control" id="users" multiple="multiple"></select>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-default" data-dismiss="modal" onclick="dismiss()">Close</button>
+                <button type="button" class="btn btn-default" data-dismiss="modal" onclick="dismiss()">关闭</button>
                 <button type="button" id="launchButton" class="btn btn-primary" onclick="launch()">
-                    <i class="fa fa-rocket"></i> Launch Campaign</button>
+                    <i class="fa fa-rocket"></i> 启动任务</button>
             </div>
         </div>
     </div>
@@ -143,33 +143,33 @@
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
                 </button>
-                <h4 class="modal-title" id="sendTestEmailModalTitle">Send Test Email</h4>
+                <h4 class="modal-title" id="sendTestEmailModalTitle">发送测试邮件</h4>
             </div>
             <div class="modal-body">
                 <div class="row" id="sendTestEmailModal.flashes"></div>
                 <div class="row">
                     <div class="col-sm-12">
-                        <label class="control-label" for="to">Send Test Email to:</label>
+                        <label class="control-label" for="to">发送测试邮件至：</label>
                     </div>
                     <br>
                     <div class="col-sm-2">
-                        <input type="text" class="form-control" placeholder="First Name" name="to_first_name">
+                        <input type="text" class="form-control" placeholder="名" name="to_first_name">
                     </div>
                     <div class="col-sm-2">
-                        <input type="text" class="form-control" placeholder="Last Name" name="to_last_name">
+                        <input type="text" class="form-control" placeholder="姓" name="to_last_name">
                     </div>
                     <div class="col-sm-4">
-                        <input type="email" class="form-control" placeholder="Email" name="to_email" required>
+                        <input type="email" class="form-control" placeholder="邮箱" name="to_email" required>
                     </div>
                     <div class="col-sm-4">
-                        <input type="text" class="form-control" placeholder="Position" name="to_position">
+                        <input type="text" class="form-control" placeholder="职位" name="to_position">
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" data-dismiss="modal" class="btn btn-default">Cancel</button>
+                <button type="button" data-dismiss="modal" class="btn btn-default">取消</button>
                 <button type="button" class="btn btn-primary" id="sendTestModalSubmit" onclick="sendTestEmail()">
-                    <i class="fa fa-envelope"></i> Send</button>
+                    <i class="fa fa-envelope"></i> 发送</button>
             </div>
         </div>
     </div>

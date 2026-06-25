@@ -1,12 +1,12 @@
 {{define "body"}}
 <div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
     <h1 class="page-header">
-        Landing Pages
+        落地页面
     </h1>
     <div id="flashes" class="row"></div>
     <div class="row">
         <button type="button" class="btn btn-primary" onclick="edit(-1)" data-toggle="modal" data-backdrop="static"
-            data-target="#modal"><i class="fa fa-plus"></i> New Page</button>
+            data-target="#modal"><i class="fa fa-plus"></i> 新建页面</button>
     </div>
     &nbsp;
     <div id="loading">
@@ -14,15 +14,15 @@
     </div>
     <div id="emptyMessage" class="row" style="display:none;">
         <div class="alert alert-info">
-            No pages created yet. Let's create one!
+            还没有页面，快来创建一个吧！
         </div>
     </div>
     <div class="row">
         <table id="pagesTable" class="table" style="display:none;">
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Last Modified Date</th>
+                    <th>名称</th>
+                    <th>最后修改时间</th>
                     <th class="col-md-2 no-sort"></th>
                 </tr>
             </thead>
@@ -39,18 +39,18 @@
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close" onclick="dismiss()"><span
                         aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title" id="modalLabel">New Landing Page</h4>
+                <h4 class="modal-title" id="modalLabel">新建落地页面</h4>
             </div>
             <div class="modal-body">
                 <div class="row" id="modal.flashes"></div>
-                <label class="control-label" for="name">Name:</label>
+                <label class="control-label" for="name">名称：</label>
                 <div class="form-group">
-                    <input type="text" class="form-control" placeholder="Page name" id="name" autofocus />
+                    <input type="text" class="form-control" placeholder="页面名称" id="name" autofocus />
                 </div>
                 <div class="form-group">
                     <button class="btn btn-danger" data-toggle="modal" data-backdrop="static" data-target="#importSiteModal"><i
                             class="fa fa-globe"></i>
-                        Import Site</button>
+                        导入网站</button>
                 </div>
                 <!-- Nav tabs -->
                 <ul class="nav nav-tabs" role="tablist">
@@ -64,29 +64,27 @@
                 </div>
                 <div class="checkbox checkbox-primary">
                     <input id="capture_credentials_checkbox" type="checkbox">
-                    <label for="capture_credentials_checkbox">Capture Submitted Data <i class="fa fa-question-circle"
-                            data-toggle="tooltip" data-placement="right" title="If the landing page contains a form, submitted input (except passwords!) will be captured."></i></label>
+                    <label for="capture_credentials_checkbox">捕获提交数据 <i class="fa fa-question-circle"
+                            data-toggle="tooltip" data-placement="right" title="如果落地页面包含表单，提交的输入内容（密码除外！）将被捕获。"></i></label>
                 </div>
                 <div class="checkbox checkbox-primary" id="capture_passwords">
                     <input id="capture_passwords_checkbox" type="checkbox">
-                    <label for="capture_passwords_checkbox">Capture Passwords</label>
+                    <label for="capture_passwords_checkbox">捕获密码</label>
                     <div class="alert alert-warning">
-                        <i class="fa fa-exclamation-circle"></i> <b>Warning:</b> Credentials are currently <b>not
-                            encrypted</b>. This means that captured passwords are stored in the database as cleartext.
-                        Be careful with this!
+                        <i class="fa fa-exclamation-circle"></i> <b>警告：</b> 凭据目前<b>未加密</b>存储。捕获的密码将以明文形式保存在数据库中，请谨慎使用！
                     </div>
                 </div>
                 <div id="redirect_url">
-                    <label class="control-label" for="redirect_url_input">Redirect to: <i class="fa fa-question-circle"
-                            data-toggle="tooltip" data-placement="right" title="This option lets you redirect the user to a page after credentials are submitted."></i></label>
+                    <label class="control-label" for="redirect_url_input">跳转地址： <i class="fa fa-question-circle"
+                            data-toggle="tooltip" data-placement="right" title="用户提交凭据后将跳转到此地址。"></i></label>
                     <div class="form-group">
                         <input id="redirect_url_input" class="form-control" placeholder="http://example.com" />
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" data-dismiss="modal" class="btn btn-default" onclick="dismiss()">Cancel</button>
-                <button type="button" class="btn btn-primary" id="modalSubmit">Save Page</button>
+                <button type="button" data-dismiss="modal" class="btn btn-default" onclick="dismiss()">取消</button>
+                <button type="button" class="btn btn-primary" id="modalSubmit">保存页面</button>
             </div>
         </div>
     </div>
@@ -98,7 +96,7 @@
             <!-- New Template Modal -->
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title" id="importSiteModalLabel">Import Site</h4>
+                <h4 class="modal-title" id="importSiteModalLabel">导入网站</h4>
             </div>
             <div class="modal-body">
                 <div class="row" id="modal.flashes"></div>
@@ -108,8 +106,8 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" data-dismiss="modal" class="btn btn-default">Cancel</button>
-                <button type="button" class="btn btn-primary" id="modalSubmit" onclick="importSite()">Import</button>
+                <button type="button" data-dismiss="modal" class="btn btn-default">取消</button>
+                <button type="button" class="btn btn-primary" id="modalSubmit" onclick="importSite()">导入</button>
             </div>
         </div>
     </div>

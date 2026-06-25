@@ -83,15 +83,15 @@ var statuses = {
 }
 
 var statsMapping = {
-    "sent": "Email Sent",
-    "opened": "Email Opened",
-    "email_reported": "Email Reported",
-    "clicked": "Clicked Link",
-    "submitted_data": "Submitted Data",
+    "sent": "已发送",
+    "opened": "已打开",
+    "email_reported": "已上报",
+    "clicked": "已点击",
+    "submitted_data": "已提交数据",
 }
 
 function deleteCampaign(idx) {
-    if (confirm("Delete " + campaigns[idx].name + "?")) {
+    if (confirm("确认删除 " + campaigns[idx].name + " ？")) {
         api.campaignId.delete(campaigns[idx].id)
             .success(function (data) {
                 successFlash(data.message)
@@ -226,7 +226,7 @@ function generateTimelineChart(campaigns) {
             type: 'areaspline'
         },
         title: {
-            text: 'Phishing Success Overview'
+            text: '钓鱼成功率概览'
         },
         xAxis: {
             type: 'datetime',
@@ -243,13 +243,13 @@ function generateTimelineChart(campaigns) {
             min: 0,
             max: 100,
             title: {
-                text: "% of Success"
+                text: "成功率 %"
             }
         },
         tooltip: {
             formatter: function () {
                 return Highcharts.dateFormat('%A, %b %d %l:%M:%S %P', new Date(this.x)) +
-                    '<br>' + this.point.name + '<br>% Success: <b>' + this.y + '%</b>'
+                    '<br>' + this.point.name + '<br>成功率：<b>' + this.y + '%</b>'
             }
         },
         legend: {
@@ -333,11 +333,11 @@ $(document).ready(function () {
                     //section for tooltips on the status of a campaign to show some quick stats
                     var launchDate;
                     if (moment(campaign.launch_date).isAfter(moment())) {
-                        launchDate = "Scheduled to start: " + moment(campaign.launch_date).format('MMMM Do YYYY, h:mm:ss a')
-                        var quickStats = launchDate + "<br><br>" + "Number of recipients: " + campaign.stats.total
+                        launchDate = "计划启动：" + moment(campaign.launch_date).format('YYYY-MM-DD HH:mm:ss')
+                        var quickStats = launchDate + "<br><br>" + "收件人数：" + campaign.stats.total
                     } else {
-                        launchDate = "Launch Date: " + moment(campaign.launch_date).format('MMMM Do YYYY, h:mm:ss a')
-                        var quickStats = launchDate + "<br><br>" + "Number of recipients: " + campaign.stats.total + "<br><br>" + "Emails opened: " + campaign.stats.opened + "<br><br>" + "Emails clicked: " + campaign.stats.clicked + "<br><br>" + "Submitted Credentials: " + campaign.stats.submitted_data + "<br><br>" + "Errors : " + campaign.stats.error + "<br><br>" + "Reported : " + campaign.stats.email_reported
+                        launchDate = "启动时间：" + moment(campaign.launch_date).format('YYYY-MM-DD HH:mm:ss')
+                        var quickStats = launchDate + "<br><br>" + "收件人数：" + campaign.stats.total + "<br><br>" + "已打开：" + campaign.stats.opened + "<br><br>" + "已点击：" + campaign.stats.clicked + "<br><br>" + "已提交凭据：" + campaign.stats.submitted_data + "<br><br>" + "错误：" + campaign.stats.error + "<br><br>" + "已上报：" + campaign.stats.email_reported
                     }
                     // Add it to the list
                     campaignRows.push([
@@ -352,7 +352,7 @@ $(document).ready(function () {
                         "<div class='pull-right'><a class='btn btn-primary' href='/campaigns/" + campaign.id + "' data-toggle='tooltip' data-placement='left' title='View Results'>\
                     <i class='fa fa-bar-chart'></i>\
                     </a>\
-                    <button class='btn btn-danger' onclick='deleteCampaign(" + i + ")' data-toggle='tooltip' data-placement='left' title='Delete Campaign'>\
+                    <button class='btn btn-danger' onclick='deleteCampaign(" + i + ")' data-toggle='tooltip' data-placement='left' title='删除任务'>\
                     <i class='fa fa-trash-o'></i>\
                     </button></div>"
                     ])
@@ -367,6 +367,6 @@ $(document).ready(function () {
             }
         })
         .error(function () {
-            errorFlash("Error fetching campaigns")
+            errorFlash("获取任务失败")
         })
 })

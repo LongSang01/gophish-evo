@@ -126,12 +126,12 @@ function dismiss() {
 // Deletes a campaign after prompting the user
 function deleteCampaign() {
     Swal.fire({
-        title: "Are you sure?",
-        text: "This will delete the campaign. This can't be undone!",
+        title: "确定删除吗？",
+        text: "这将删除该任务，且无法撤销！",
         type: "warning",
         animation: false,
         showCancelButton: true,
-        confirmButtonText: "Delete Campaign",
+        confirmButtonText: "删除任务",
         confirmButtonColor: "#428bca",
         reverseButtons: true,
         allowOutsideClick: false,
@@ -150,8 +150,8 @@ function deleteCampaign() {
     }).then(function (result) {
         if(result.value){
             Swal.fire(
-                'Campaign Deleted!',
-                'This campaign has been deleted!',
+                '任务已删除！',
+                '该任务已被删除！',
                 'success'
             );
         }
@@ -164,12 +164,12 @@ function deleteCampaign() {
 // Completes a campaign after prompting the user
 function completeCampaign() {
     Swal.fire({
-        title: "Are you sure?",
-        text: "Gophish will stop processing events for this campaign",
+        title: "确定完成吗？",
+        text: "Gophish 将停止处理此任务的事件",
         type: "warning",
         animation: false,
         showCancelButton: true,
-        confirmButtonText: "Complete Campaign",
+        confirmButtonText: "完成任务",
         confirmButtonColor: "#428bca",
         reverseButtons: true,
         allowOutsideClick: false,
@@ -188,12 +188,12 @@ function completeCampaign() {
     }).then(function (result) {
         if (result.value){
             Swal.fire(
-                'Campaign Completed!',
-                'This campaign has been completed!',
+                '任务已完成！',
+                '该任务已完成！',
                 'success'
             );
             $('#complete_button')[0].disabled = true;
-            $('#complete_button').text('Completed!')
+            $('#complete_button').text('已完成！')
             doPoll = false;
         }
     })
@@ -260,7 +260,7 @@ function replay(event_idx) {
     /* Ensure we know where to send the user */
     // Prompt for the URL
     Swal.fire({
-        title: 'Where do you want the credentials submitted to?',
+        title: '要将凭据提交到哪里？',
         input: 'text',
         showCancelButton: true,
         inputPlaceholder: "http://example.com/login",
@@ -270,7 +270,7 @@ function replay(event_idx) {
                 if (value) {
                     resolve();
                 } else {
-                    reject('Invalid URL.');
+                    reject('无效的URL。');
                 }
             });
         }
@@ -330,7 +330,7 @@ var renderDevice = function (event_details) {
     }
 
     if (ua.os.version) {
-        deviceName = deviceName + ' (OS Version: ' + ua.os.version + ')'
+                        deviceName = deviceName + '（OS版本：' + ua.os.version + ')'
     }
 
     deviceString = '<div class="timeline-device-os"><span class="fa fa-stack">' +
@@ -352,7 +352,7 @@ var renderDevice = function (event_details) {
             browserIcon = deviceBrowser.toLowerCase()
             if (browserIcon == 'ie') browserIcon = 'internet-explorer'
         }
-        browserVersion = '(Version: ' + ua.browser.version + ')'
+        browserVersion = '（版本：' + ua.browser.version + ')'
     }
 
     var browserString = '<div class="timeline-device-browser"><span class="fa fa-stack">' +
@@ -376,9 +376,9 @@ function renderTimeline(data) {
         "send_date": data[8]
     }
     results = '<div class="timeline col-sm-12 well well-lg">' +
-        '<h6>Timeline for ' + escapeHtml(record.first_name) + ' ' + escapeHtml(record.last_name) +
-        '</h6><span class="subtitle">Email: ' + escapeHtml(record.email) +
-        '<br>Result ID: ' + escapeHtml(record.id) + '</span>' +
+        '<h6>时间线：' + escapeHtml(record.first_name) + ' ' + escapeHtml(record.last_name) +
+        '</h6><span class="subtitle">邮箱：' + escapeHtml(record.email) +
+        '<br>结果ID：' + escapeHtml(record.id) + '</span>' +
         '<div class="timeline-graph col-sm-6">'
     $.each(campaign.timeline, function (i, event) {
         if (!event.email || event.email == record.email) {
@@ -400,13 +400,13 @@ function renderTimeline(data) {
                 }
                 if (event.message == "Submitted Data") {
                     results += '<div class="timeline-replay-button"><button onclick="replay(' + i + ')" class="btn btn-success">'
-                    results += '<i class="fa fa-refresh"></i> Replay Credentials</button></div>'
-                    results += '<div class="timeline-event-details"><i class="fa fa-caret-right"></i> View Details</div>'
+                    results += '<i class="fa fa-refresh"></i> 重放凭据</button></div>'
+                    results += '<div class="timeline-event-details"><i class="fa fa-caret-right"></i> 查看详情</div>'
                 }
                 if (details.payload) {
                     results += '<div class="timeline-event-results">'
                     results += '    <table class="table table-condensed table-bordered table-striped">'
-                    results += '        <thead><tr><th>Parameter</th><th>Value(s)</tr></thead><tbody>'
+                    results += '        <thead><tr><th>参数</th><th>值</tr></thead><tbody>'
                     $.each(Object.keys(details.payload), function (i, param) {
                         if (param == "rid") {
                             return true;
@@ -420,7 +420,7 @@ function renderTimeline(data) {
                     results += '</div>'
                 }
                 if (details.error) {
-                    results += '<div class="timeline-event-details"><i class="fa fa-caret-right"></i> View Details</div>'
+                    results += '<div class="timeline-event-details"><i class="fa fa-caret-right"></i> 查看详情</div>'
                     results += '<div class="timeline-event-results">'
                     results += '<span class="label label-default">Error</span> ' + details.error
                     results += '</div>'
@@ -436,7 +436,7 @@ function renderTimeline(data) {
         results +=
             '    <div class="timeline-icon ' + statuses[record.status].label + '">' +
             '    <i class="fa ' + statuses[record.status].icon + '"></i></div>' +
-            '    <div class="timeline-message">' + "Scheduled to send at " + record.send_date + '</span>'
+            '    <div class="timeline-message">' + "计划发送时间：" + record.send_date + '</span>'
     }
     results += '</div></div>'
     return results
@@ -450,7 +450,7 @@ var renderTimelineChart = function (chartopts) {
             height: "200px"
         },
         title: {
-            text: 'Campaign Timeline'
+            text: '任务时间线'
         },
         xAxis: {
             type: 'datetime',
@@ -478,7 +478,7 @@ var renderTimelineChart = function (chartopts) {
         tooltip: {
             formatter: function () {
                 return Highcharts.dateFormat('%A, %b %d %l:%M:%S %P', new Date(this.x)) +
-                    '<br>Event: ' + this.point.message + '<br>Email: <b>' + this.point.email + '</b>'
+                    '<br>事件：' + this.point.message + '<br>邮箱：<b>' + this.point.email + '</b>'
             }
         },
         legend: {
@@ -616,7 +616,7 @@ function createStatusLabel(status, send_date) {
     var statusColumn = "<span class=\"label " + label + "\">" + status + "</span>"
     // Add the tooltip if the email is scheduled to be sent
     if (status == "Scheduled" || status == "Retrying") {
-        var sendDateMessage = "Scheduled to send at " + send_date
+        var sendDateMessage = "计划发送时间：" + send_date
         statusColumn = "<span class=\"label " + label + "\" data-toggle=\"tooltip\" data-placement=\"top\" data-html=\"true\" title=\"" + sendDateMessage + "\">" + status + "</span>"
     }
     return statusColumn
@@ -730,10 +730,10 @@ function load() {
                 $("#loading").hide()
                 $("#campaignResults").show()
                 // Set the title
-                $("#page-title").text("Results for " + c.name)
+                $("#page-title").text(c.name + " - 结果")
                 if (c.status == "Completed") {
                     $('#complete_button')[0].disabled = true;
-                    $('#complete_button').text('Completed!');
+                    $('#complete_button').text('已完成！');
                     doPoll = false;
                 }
                 // Setup viewing the details of a result
@@ -901,7 +901,7 @@ function load() {
         })
         .error(function () {
             $("#loading").hide()
-            errorFlash(" Campaign not found!")
+            errorFlash(" 未找到任务！")
         })
 }
 
@@ -920,12 +920,12 @@ function refresh() {
 
 function report_mail(rid, cid) {
     Swal.fire({
-        title: "Are you sure?",
-        text: "This result will be flagged as reported (RID: " + rid + ")",
+        title: "确定上报吗？",
+        text: "此结果将被标记为已上报（RID：" + rid + "）",
         type: "question",
         animation: false,
         showCancelButton: true,
-        confirmButtonText: "Continue",
+        confirmButtonText: "继续",
         confirmButtonColor: "#428bca",
         reverseButtons: true,
         allowOutsideClick: false,
@@ -946,13 +946,13 @@ function report_mail(rid, cid) {
                 .catch(error => {
                     let errorMessage = error.message;
                     if (error.message === "Failed to fetch") {
-                        errorMessage = "This might be due to Mixed Content issues or network problems.";
+                        errorMessage = "这可能是由于混合内容问题或网络问题。";
                     }
                     Swal.fire({
-                        title: 'Error',
+                        title: '错误',
                         text: errorMessage,
                         type: 'error',
-                        confirmButtonText: 'Close'
+                        confirmButtonText: '关闭'
                     });
                 });
             }));

@@ -1,12 +1,12 @@
 {{define "body"}}
 <div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
     <h1 class="page-header">
-        Sending Profiles
+        发件箱配置
     </h1>
     <div id="flashes" class="row"></div>
     <div class="row">
         <button type="button" class="btn btn-primary" onclick="edit(-1)" data-toggle="modal" data-backdrop="static"
-            data-target="#modal"><i class="fa fa-plus"></i> New Profile</button>
+            data-target="#modal"><i class="fa fa-plus"></i> 新建配置</button>
     </div>
     &nbsp;
     <div id="loading">
@@ -14,16 +14,16 @@
     </div>
     <div id="emptyMessage" class="row" style="display:none;">
         <div class="alert alert-info">
-            No profiles created yet. Let's create one!
+            还没有配置，快来创建一个吧！
         </div>
     </div>
     <div class="row">
         <table id="profileTable" class="table" style="display:none;">
             <thead>
                 <tr>
-                    <th class="col-md-4">Name</th>
-                    <th>Interface Type</th>
-                    <th>Last Modified Date</th>
+                    <th class="col-md-4">名称</th>
+                    <th>接口类型</th>
+                    <th>最后修改时间</th>
                     <th class="col-md-2 no-sort"></th>
                 </tr>
             </thead>
@@ -40,34 +40,34 @@
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close" onclick="dismiss()"><span
                         aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title" id="profileModalLabel">New Sending Profile</h4>
+                <h4 class="modal-title" id="profileModalLabel">新建发件箱配置</h4>
             </div>
             <div class="modal-body">
                 <div class="row" id="modal.flashes"></div>
                 <form>
                     <div class="form-group">
-                        <label class="control-label" for="name">Name:</label>
-                        <input type="text" class="form-control" placeholder="Profile name" id="name" autofocus />
-                        <label class="control-label" for="interface_type">Interface Type:</label>
+                        <label class="control-label" for="name">名称：</label>
+                        <input type="text" class="form-control" placeholder="配置名称" id="name" autofocus />
+                        <label class="control-label" for="interface_type">接口类型：</label>
                         <input type="text" class="form-control" value="SMTP" id="interface_type" disabled />
-                        <label class="control-label" for="from">SMTP From: <i class="fa fa-question-circle"
-                                data-toggle="tooltip" data-placement="right" title="Set this to an email address from your sending domain to bypass SPF-checks. You can set the Envelope Sender in Email Templates. The Envelope Sender is shown to the user."></i></label>
+                        <label class="control-label" for="from">SMTP 发件人： <i class="fa fa-question-circle"
+                                data-toggle="tooltip" data-placement="right" title="设置为发件域名的邮箱地址以通过 SPF 校验。可在邮件模板中设置显示给收件人的发件人地址。"></i></label>
                         <input type="text" class="form-control" placeholder="test@example.com" id="from"
                             required />
-                        <label class="control-label" for="host">Host:</label>
+                        <label class="control-label" for="host">主机：</label>
                         <input type="text" class="form-control" placeholder="smtp.example.com:25" id="host" required />
-                        <label class="control-label" for="username">Username:</label>
-                        <input type="text" class="form-control" placeholder="Username" id="username" />
-                        <label class="control-label" for="password">Password:</label>
-                        <input type="password" class="form-control" placeholder="Password" id="password" />
+                        <label class="control-label" for="username">用户名：</label>
+                        <input type="text" class="form-control" placeholder="用户名" id="username" />
+                        <label class="control-label" for="password">密码：</label>
+                        <input type="password" class="form-control" placeholder="密码" id="password" />
                         <div class="checkbox checkbox-primary">
                             <input id="ignore_cert_errors" type="checkbox" checked>
-                            <label for="ignore_cert_errors">Ignore Certificate Errors <i class="fa fa-question-circle"
-                                    data-toggle="tooltip" data-placement="right" title="Ignore common certificate errors such as self-signed certs (exposes you to MiTM attacks - use carefully!)"></i></label>
+                            <label for="ignore_cert_errors">忽略证书错误 <i class="fa fa-question-circle"
+                                    data-toggle="tooltip" data-placement="right" title="忽略常见的证书错误，如自签名证书（可能会遭受中间人攻击，请谨慎使用！）"></i></label>
                         </div>
                     </div>
                     <fieldset class="form-group">
-                        <label class="control-label input-group">Email Headers:</label>
+                        <label class="control-label input-group">邮件头：</label>
                         <div class="col-md-4">
                             <input type="text" class="form-control" name="headerKey" id="headerKey" placeholder="X-Custom-Header">
                         </div>
@@ -75,8 +75,7 @@
                             <input type="text" class="form-control" name="headerValue" id="headerValue" placeholder='{{"{{"}}.URL{{"}}"}}-gophish'>
                         </div>
                         <div class="col-md-2">
-                            <button id="addCustomHeader" class="btn btn-danger btn-headers" type="button"><i class="fa fa-plus"></i> Add
-                                Custom Header</button>
+                            <button id="addCustomHeader" class="btn btn-danger btn-headers" type="button"><i class="fa fa-plus"></i> 添加自定义头</button>
                         </div>
                     </fieldset>
                     <table id="headersTable" class="table table-hover table-striped table-condensed">
@@ -91,12 +90,12 @@
                         </tbody>
                     </table>
                     <button type="button" data-toggle="modal" data-backdrop="static" data-target="#sendTestEmailModal"
-                        class="btn btn-primary"><i class="fa fa-envelope"></i> Send Test Email</button>
+                        class="btn btn-primary"><i class="fa fa-envelope"></i> 发送测试邮件</button>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" data-dismiss="modal" class="btn btn-default" onclick="dismiss()">Cancel</button>
-                <button type="button" class="btn btn-primary" id="modalSubmit">Save Profile</button>
+                <button type="button" data-dismiss="modal" class="btn btn-default" onclick="dismiss()">取消</button>
+                <button type="button" class="btn btn-primary" id="modalSubmit">保存配置</button>
             </div>
         </div>
     </div>
@@ -108,33 +107,33 @@
             <!-- New Email Modal -->
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title" id="sendTestEmailModalTitle">Send Test Email</h4>
+                <h4 class="modal-title" id="sendTestEmailModalTitle">发送测试邮件</h4>
             </div>
             <div class="modal-body">
                 <div class="row" id="sendTestEmailModal.flashes"></div>
                 <div class="row">
                     <div class="col-sm-12">
-                        <label class="control-label" for="to">Send Test Email to:</label>
+                        <label class="control-label" for="to">发送测试邮件至：</label>
                     </div>
                     <br>
                     <div class="col-sm-2">
-                        <input type="text" class="form-control" placeholder="First Name" name="to_first_name">
+                        <input type="text" class="form-control" placeholder="名" name="to_first_name">
                     </div>
                     <div class="col-sm-2">
-                        <input type="text" class="form-control" placeholder="Last Name" name="to_last_name">
+                        <input type="text" class="form-control" placeholder="姓" name="to_last_name">
                     </div>
                     <div class="col-sm-4">
-                        <input type="email" class="form-control" placeholder="Email" name="to_email" required>
+                        <input type="email" class="form-control" placeholder="邮箱" name="to_email" required>
                     </div>
                     <div class="col-sm-4">
-                        <input type="text" class="form-control" placeholder="Position" name="to_position">
+                        <input type="text" class="form-control" placeholder="职位" name="to_position">
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" data-dismiss="modal" class="btn btn-default">Cancel</button>
+                <button type="button" data-dismiss="modal" class="btn btn-default">取消</button>
                 <button type="button" class="btn btn-primary" id="sendTestModalSubmit" onclick="sendTestEmail()"><i
-                        class="fa fa-envelope"></i> Send</button>
+                        class="fa fa-envelope"></i> 发送</button>
             </div>
         </div>
     </div>

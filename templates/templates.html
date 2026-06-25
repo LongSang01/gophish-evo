@@ -2,13 +2,13 @@
 <div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
     <div class="row">
         <h1 class="page-header">
-            Email Templates
+            邮件模板
         </h1>
     </div>
     <div id="flashes" class="row"></div>
     <div class="row">
         <button type="button" class="btn btn-primary" onclick="edit(-1)" data-toggle="modal" data-backdrop="static"
-            data-target="#modal"><i class="fa fa-plus"></i> New Template</button>
+            data-target="#modal"><i class="fa fa-plus"></i> 新建模板</button>
     </div>
     &nbsp;
     <div id="loading">
@@ -16,15 +16,15 @@
     </div>
     <div id="emptyMessage" class="row" style="display:none;">
         <div class="alert alert-info">
-            No templates yet. Let's create one!
+            还没有模板，快来创建一个吧！
         </div>
     </div>
     <div class="row">
         <table id="templateTable" class="table" style="display:none;">
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Modified Date</th>
+                    <th>名称</th>
+                    <th>修改时间</th>
                     <th class="col-md-2 no-sort"></th>
                 </tr>
             </thead>
@@ -41,37 +41,37 @@
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close" onclick="dismiss()"><span
                         aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title" id="templateModalLabel">New Template</h4>
+                <h4 class="modal-title" id="templateModalLabel">新建模板</h4>
             </div>
             <div class="modal-body">
                 <div class="row" id="modal.flashes"></div>
-                <label class="control-label" for="name">Name:</label>
+                <label class="control-label" for="name">名称：</label>
                 <div class="form-group">
-                    <input type="text" class="form-control" ng-model="template.name" placeholder="Template name" id="name"
+                    <input type="text" class="form-control" ng-model="template.name" placeholder="模板名称" id="name"
                         autofocus />
                 </div>
                 <div class="form-group">
                     <button class="btn btn-danger" data-toggle="modal" data-backdrop="static" data-target="#importEmailModal"><i
                             class="fa fa-envelope"></i>
-                        Import Email</button>
+                        导入邮件</button>
                 </div>
-                <label class="control-label" for="envelope-sender">Envelope Sender: <i class="fa fa-question-circle" data-toggle="tooltip" data-placement="right" title="This sender is shown to the user by most email clients. Defaults to the SMTP From as defined in the Sending Profile."></i></label>
+                <label class="control-label" for="envelope-sender">发件人： <i class="fa fa-question-circle" data-toggle="tooltip" data-placement="right" title="发件人地址会显示给收件人。默认使用发件箱配置中设置的 SMTP 发件人。"></i></label>
                 <div class="form-group">
-                    <input type="text" class="form-control" placeholder="First Last <test@example.com>" id="envelope-sender" />
+                    <input type="text" class="form-control" placeholder="发件人姓名 <test@example.com>" id="envelope-sender" />
                 </div>
-                <label class="control-label" for="subject">Subject:</label>
+                <label class="control-label" for="subject">主题：</label>
                 <div class="form-group">
-                    <input type="text" class="form-control" placeholder="Email Subject" id="subject" />
+                    <input type="text" class="form-control" placeholder="邮件主题" id="subject" />
                 </div>
                 <!-- Nav tabs -->
                 <ul class="nav nav-tabs" role="tablist">
-                    <li class="active" role="text"><a href="#text" aria-controls="text" role="tab" data-toggle="tab">Text</a></li>
+                    <li class="active" role="text"><a href="#text" aria-controls="text" role="tab" data-toggle="tab">纯文本</a></li>
                     <li role="html"><a href="#html" aria-controls="html" role="tab" data-toggle="tab">HTML</a></li>
                 </ul>
                 <!-- Tab panes -->
                 <div class="tab-content">
                     <div role="tabpanel" class="tab-pane active" id="text">
-                        <textarea rows="10" id="text_editor" class="gophish-editor form-control" placeholder="Plaintext"></textarea>
+                        <textarea rows="10" id="text_editor" class="gophish-editor form-control" placeholder="纯文本内容"></textarea>
                     </div>
                     <div role="tabpanel" class="tab-pane" id="html">
                         <textarea id="html_editor"></textarea>
@@ -79,9 +79,9 @@
                 </div>
                 <div class="checkbox checkbox-primary">
                     <input id="use_tracker_checkbox" type="checkbox" checked>
-                    <label for="use_tracker_checkbox">Add Tracking Image</label>
+                    <label for="use_tracker_checkbox">添加跟踪图片</label>
                 </div>
-                <span class="btn btn-danger btn-file"><i class="fa fa-plus"></i> Add Files
+                <span class="btn btn-danger btn-file"><i class="fa fa-plus"></i> 添加附件
                     <input id="attachmentUpload" type="file" onchange="attach(this.files)" multiple>
                 </span>
                 <br />
@@ -90,7 +90,7 @@
                     <thead>
                         <tr>
                             <th class="col-md-1 no-sort"></th>
-                            <th class="col-md-10">Name</th>
+                            <th class="col-md-10">名称</th>
                             <th class="col-md-1 no-sort"></th>
                             <th class="datatable_hidden no-sort">Content</th>
                             <th class="datatable_hidden no-sort">Type</th>
@@ -102,8 +102,8 @@
                 <hr>
             </div>
             <div class="modal-footer">
-                <button type="button" data-dismiss="modal" class="btn btn-default" onclick="dismiss()">Cancel</button>
-                <button type="button" class="btn btn-primary" id="modalSubmit">Save Template</button>
+                <button type="button" data-dismiss="modal" class="btn btn-default" onclick="dismiss()">取消</button>
+                <button type="button" class="btn btn-primary" id="modalSubmit">保存模板</button>
             </div>
         </div>
     </div>
@@ -115,22 +115,22 @@
             <!-- New Email Modal -->
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title" id="importEmailModalLabel">Import Email</h4>
+                <h4 class="modal-title" id="importEmailModalLabel">导入邮件</h4>
             </div>
             <div class="modal-body">
                 <div class="row" id="modal.flashes"></div>
-                <label class="control-label" for="email">Email Content:</label>
+                <label class="control-label" for="email">邮件内容：</label>
                 <div class="form-group">
-                    <textarea rows="10" id="email_content" class="gophish-editor form-control" placeholder="Raw Email Source"></textarea>
+                    <textarea rows="10" id="email_content" class="gophish-editor form-control" placeholder="原始邮件源码"></textarea>
                 </div>
                 <div class="checkbox checkbox-primary">
                     <input id="convert_links_checkbox" type="checkbox" checked>
-                    <label for="convert_links_checkbox">Change Links to Point to Landing Page</label>
+                    <label for="convert_links_checkbox">将链接替换为落地页面地址</label>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" data-dismiss="modal" class="btn btn-default">Cancel</button>
-                <button type="button" class="btn btn-primary" id="modalSubmit" onclick="importEmail()">Import</button>
+                <button type="button" data-dismiss="modal" class="btn btn-default">取消</button>
+                <button type="button" class="btn btn-primary" id="modalSubmit" onclick="importEmail()">导入</button>
             </div>
         </div>
     </div>

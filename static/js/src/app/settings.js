@@ -41,19 +41,19 @@ $(document).ready(function () {
         
         //To avoid unmarshalling error in controllers/api/imap.go. It would fail gracefully, but with a generic error.
         if (imapSettings.host == ""){
-            errorFlash("No IMAP Host specified")
+            errorFlash("未指定IMAP主机")
             document.body.scrollTop = 0;
             document.documentElement.scrollTop = 0;
             return false
         }
         if (imapSettings.port == ""){
-            errorFlash("No IMAP Port specified")
+            errorFlash("未指定IMAP端口")
             document.body.scrollTop = 0;
             document.documentElement.scrollTop = 0;
             return false
         }
         if (isNaN(imapSettings.port) || imapSettings.port <1 || imapSettings.port > 65535  ){ 
-            errorFlash("Invalid IMAP Port")
+            errorFlash("无效的IMAP端口")
             document.body.scrollTop = 0;
             document.documentElement.scrollTop = 0;
             return false
@@ -64,9 +64,9 @@ $(document).ready(function () {
 
         api.IMAP.post(imapSettings).done(function (data) {
                 if (data.success == true) {
-                    successFlashFade("Successfully updated IMAP settings.", 2)
+                    successFlashFade("IMAP设置更新成功。", 2)
                 } else {
-                    errorFlash("Unable to update IMAP settings.")
+                    errorFlash("无法更新IMAP设置。")
                 }
             })
             .success(function (data){
@@ -96,19 +96,19 @@ $(document).ready(function () {
 
         //To avoid unmarshalling error in controllers/api/imap.go. It would fail gracefully, but with a generic error. 
         if (server.host == ""){
-            errorFlash("No IMAP Host specified")
+            errorFlash("未指定IMAP主机")
             document.body.scrollTop = 0;
             document.documentElement.scrollTop = 0;
             return false
         }
         if (server.port == ""){
-            errorFlash("No IMAP Port specified")
+            errorFlash("未指定IMAP端口")
             document.body.scrollTop = 0;
             document.documentElement.scrollTop = 0;
             return false
         }
         if (isNaN(server.port) || server.port <1 || server.port > 65535  ){
-            errorFlash("Invalid IMAP Port")
+            errorFlash("无效的IMAP端口")
             document.body.scrollTop = 0;
             document.documentElement.scrollTop = 0;
             return false
@@ -129,29 +129,29 @@ $(document).ready(function () {
         $('#lastlogin').attr("disabled", true);
         $('#imapfreq').attr("disabled", true);
         $("#validateimap").attr("disabled", true);  
-        $("#validateimap").html("<i class='fa fa-circle-o-notch fa-spin'></i> Testing...");
+        $("#validateimap").html("<i class='fa fa-circle-o-notch fa-spin'></i> 测试中...");
         
         api.IMAP.validate(server).done(function(data) {
             if (data.success == true) {
                 Swal.fire({
-                    title: "Success",
-                    html: "Logged into <b>" + escapeHtml($("#imaphost").val()) + "</b>",
+                    title: "成功",
+                    html: "已登录 <b>" + escapeHtml($("#imaphost").val()) + "</b>",
                     type: "success",
                 })
             } else {
                 Swal.fire({
-                    title: "Failed!",
-                    html: "Unable to login to <b>" + escapeHtml($("#imaphost").val()) + "</b>.",
+                    title: "失败！",
+                    html: "无法登录 <b>" + escapeHtml($("#imaphost").val()) + "</b>。",
                     type: "error",
                     showCancelButton: true,
-                    cancelButtonText: "Close",
-                    confirmButtonText: "More Info",
+                    cancelButtonText: "关闭",
+                    confirmButtonText: "更多信息",
                     confirmButtonColor: "#428bca",
                     allowOutsideClick: false,
                 }).then(function(result) {
                     if (result.value) {
                         Swal.fire({
-                            title: "Error:",
+                            title: "错误：",
                             text: data.message,
                         })
                     }
@@ -161,8 +161,8 @@ $(document).ready(function () {
           })
           .fail(function() {
             Swal.fire({
-                title: "Failed!",
-                text: "An unecpected error occured.",
+                title: "失败！",
+                text: "发生了一个意外错误。",
                 type: "error",
             })
           })
@@ -224,7 +224,7 @@ $(document).ready(function () {
 
         })
         .error(function () {
-            errorFlash("Error fetching IMAP settings")
+            errorFlash("获取IMAP设置失败")
         })
     }
 
