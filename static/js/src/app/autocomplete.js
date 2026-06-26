@@ -31,7 +31,7 @@ var TEMPLATE_TAGS = [{
     {
         id: 7,
         name: 'URL',
-        description: '您的Gophish监听器URL。'
+        description: '您的Gophish-EVO监听器URL。'
     },
     {
         id: 8,

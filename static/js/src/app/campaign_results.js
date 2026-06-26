@@ -165,7 +165,7 @@ function deleteCampaign() {
 function completeCampaign() {
     Swal.fire({
         title: "确定完成吗？",
-        text: "Gophish 将停止处理此任务的事件",
+        text: "Gophish-EVO 将停止处理此任务的事件",
         type: "warning",
         animation: false,
         showCancelButton: true,
@@ -736,7 +736,7 @@ function load() {
         .success(function (c) {
             campaign = c
             if (campaign) {
-                $("title").text(c.name + " - Gophish")
+                $("title").text(c.name + " - Gophish-EVO")
                 $("#loading").hide()
                 $("#campaignResults").show()
                 // Set the title

@@ -1,66 +1,51 @@
-![gophish logo](https://raw.github.com/gophish/gophish/master/static/images/gophish_purple.png)
+# Gophish-Evo
 
-Gophish
-=======
+基于 [Gophish](https://github.com/gophish/gophish) 的二次开发版本，进行中文本地化和功能增强。
 
-![Build Status](https://github.com/gophish/gophish/workflows/CI/badge.svg) [![GoDoc](https://godoc.org/github.com/gophish/gophish?status.svg)](https://godoc.org/github.com/gophish/gophish)
+在原版 Gophish 基础上修改以下功能：
 
-Gophish: Open-Source Phishing Toolkit
+### 主要更新
 
-[Gophish](https://getgophish.com) is an open-source phishing toolkit designed for businesses and penetration testers. It provides the ability to quickly and easily setup and execute phishing engagements and security awareness training.
+- **中文本地化**：界面大量中文化
+- **多发件箱支持**：支持调用多个发件箱在单个任务内按顺序发送
+- **二维码功能**：内置二维码生成，补丁来自[gophish-z](https://github.com/hikeny666/gophish-z)
 
-### Install
+### 修改项
 
-Installation of Gophish is dead-simple - just download and extract the zip containing the [release for your system](https://github.com/gophish/gophish/releases/), and run the binary. Gophish has binary releases for Windows, Mac, and Linux platforms.
+- 将"姓"和"名"合并为"姓名"单列，符合中文习惯
+- 修复复制发件箱时 header 头不被复制的问题
+- 修改默认监听地址改为 127.0.0.1:8080，推荐使用 nginx 反向代理
+- 更新部分依赖项
 
-### Building From Source
-**If you are building from source, please note that Gophish requires Go v1.10 or above!**
+### 构建
 
-To build Gophish from source, simply run ```git clone https://github.com/gophish/gophish.git``` and ```cd``` into the project source directory. Then, run ```go build```. After this, you should have a binary called ```gophish``` in the current directory.
+- 后端代码
 
-### Docker
-You can also use Gophish via the official Docker container [here](https://hub.docker.com/r/gophish/gophish/).
-
-### Setup
-After running the Gophish binary, open an Internet browser to https://localhost:3333 and login with the default username and password listed in the log output.
-e.g.
+```bash
+git clone https://github.com/LongSang01/gophish-evo
+cd gophish-evo
+go build
 ```
-time="2020-07-29T01:24:08Z" level=info msg="Please login with the username admin and the password 4304d5255378177d"
+
+- 前端代码
+
+```bash
+npm install
+npx gulp
 ```
 
-Releases of Gophish prior to v0.10.1 have a default username of `admin` and password of `gophish`.
+### 文档
 
-### Documentation
+文档请参考 [Gophish 官方文档](https://getgophish.com/documentation/)
 
-Documentation can be found on our [site](http://getgophish.com/documentation). Find something missing? Let us know by filing an issue!
+### Thanks
 
-### Issues
+https://github.com/gophish/gophish
 
-Find a bug? Want more features? Find something missing in the documentation? Let us know! Please don't hesitate to [file an issue](https://github.com/gophish/gophish/issues/new) and we'll get right on it.
+https://github.com/hikeny666/gophish-z
 
-### License
-```
-Gophish - Open-Source Phishing Framework
+### 免责声明
 
-The MIT License (MIT)
-
-Copyright (c) 2013 - 2020 Jordan Wright
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software ("Gophish Community Edition") and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-```
+本项目仅用于授权的安全意识培训、红队演练及渗透测试场景。
+使用者需确保在获得明确授权的前提下使用本工具,
+对任何未经授权的使用所造成的后果,作者不承担任何责任
