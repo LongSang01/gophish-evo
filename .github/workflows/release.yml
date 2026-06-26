@@ -43,12 +43,12 @@ jobs:
 
       - name: Prepare artifact name (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: echo "RELEASE=gophish-${{ github.event.release.tag_name }}-${{ matrix.releaseos }}-64bit" >> $GITHUB_ENV
+        run: echo "RELEASE=gophish-evo-${{ github.event.release.tag_name }}-${{ matrix.releaseos }}-64bit" >> $GITHUB_ENV
 
       - name: Prepare artifact name (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
-        run: echo "RELEASE=gophish-${{ github.event.release.tag_name }}-${{ matrix.releaseos }}-64bit" >> $env:GITHUB_ENV
+        run: echo "RELEASE=gophish-evo-${{ github.event.release.tag_name }}-${{ matrix.releaseos }}-64bit" >> $env:GITHUB_ENV
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
