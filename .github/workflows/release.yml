@@ -124,6 +124,7 @@ jobs:
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.release.tag_name }}
           files: |
             releases/*.zip
             releases/SHA256SUMS
