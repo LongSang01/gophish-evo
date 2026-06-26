@@ -297,6 +297,22 @@ window.api = api
 
 // Register our moment.js datatables listeners
 $(document).ready(function () {
+    // Define Chinese locale for moment.js
+    moment.locale('zh-cn', {
+        meridiem: function (hour, minute, isLower) {
+            return hour < 12 ? '上午' : '下午';
+        }
+    });
+    // Set Highcharts Chinese language
+    if (typeof Highcharts !== 'undefined') {
+        Highcharts.setOptions({
+            lang: {
+                months: ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'],
+                shortMonths: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
+                weekdays: ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+            }
+        });
+    }
     // Setup nav highlighting
     var path = location.pathname;
     $('.nav-sidebar li').each(function () {
@@ -306,7 +322,7 @@ $(document).ready(function () {
             $this.addClass('active');
         }
     })
-    $.fn.dataTable.moment('MMMM Do YYYY, h:mm:ss a');
+    $.fn.dataTable.moment('YYYY年MM月DD日 A h:mm:ss');
     // Setup tooltips
     $('[data-toggle="tooltip"]').tooltip()
 });

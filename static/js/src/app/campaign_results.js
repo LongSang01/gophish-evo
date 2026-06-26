@@ -388,7 +388,7 @@ function renderTimeline(data) {
                 '    <div class="timeline-icon ' + statuses[event.message].label + '">' +
                 '    <i class="fa ' + statuses[event.message].icon + '"></i></div>' +
                 '    <div class="timeline-message">' + escapeHtml(event.message) +
-                '    <span class="timeline-date">' + moment.utc(event.time).local().format('MMMM Do YYYY h:mm:ss a') + '</span>'
+                '    <span class="timeline-date">' + moment.utc(event.time).local().format('YYYY年MM月DD日 A h:mm:ss') + '</span>'
             if (event.details) {
                 details = JSON.parse(event.details)
                 if (event.message == "Clicked Link" || event.message == "Submitted Data") {
@@ -435,7 +435,7 @@ function renderTimeline(data) {
         results +=
             '    <div class="timeline-icon ' + statuses[record.status].label + '">' +
             '    <i class="fa ' + statuses[record.status].icon + '"></i></div>' +
-            '    <div class="timeline-message">' + "计划发送时间：" + record.send_date + '</span>'
+            '    <div class="timeline-message">' + "计划发送时间：" + record.send_date + '</div>'
     }
     results += '</div></div>'
     return results
@@ -454,12 +454,12 @@ var renderTimelineChart = function (chartopts) {
         xAxis: {
             type: 'datetime',
             dateTimeLabelFormats: {
-                second: '%l:%M:%S',
-                minute: '%l:%M',
-                hour: '%l:%M',
-                day: '%b %d, %Y',
-                week: '%b %d, %Y',
-                month: '%b %Y'
+                second: '%H:%M:%S',
+                minute: '%H:%M',
+                hour: '%H:%M',
+                day: '%Y年%m月%d日',
+                week: '%Y年%m月%d日',
+                month: '%Y年%m月'
             }
         },
         yAxis: {
@@ -476,7 +476,7 @@ var renderTimelineChart = function (chartopts) {
         },
         tooltip: {
             formatter: function () {
-                return Highcharts.dateFormat('%A, %b %d %l:%M:%S %P', new Date(this.x)) +
+                return moment(this.x).format('YYYY年MM月DD日 A h:mm:ss') +
                     '<br>事件：' + this.point.message + '<br>邮箱：<b>' + this.point.email + '</b>'
             }
         },
@@ -706,7 +706,7 @@ function poll() {
                                 }
                             })
                         }
-                        rowData[8] = moment(result.send_date).format('MMMM Do YYYY, h:mm:ss a')
+                        rowData[8] = moment(result.send_date).format('YYYY年MM月DD日 A h:mm:ss')
                         rowData[7] = result.reported
                         rowData[6] = result.status
                         rowData[5] = escapeHtml(smtpFromAddress) || ""
@@ -823,7 +823,7 @@ function load() {
                         escapeHtml(smtpFromAddress) || "",
                         result.status,
                         result.reported,
-                        moment(result.send_date).format('MMMM Do YYYY, h:mm:ss a')
+                        moment(result.send_date).format('YYYY年MM月DD日 A h:mm:ss')
                     ])
                     email_series_data[result.status]++;
                     if (result.reported) {

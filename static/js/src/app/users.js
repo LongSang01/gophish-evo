@@ -205,7 +205,7 @@ const load = () => {
             $.each(users, (i, user) => {
                 lastlogin = ""
                 if (user.last_login != "0001-01-01T00:00:00Z") {
-                    lastlogin = moment(user.last_login).format('YYYY-MM-DD HH:mm:ss')
+                    lastlogin = moment(user.last_login).format('YYYY年MM月DD日 A h:mm:ss')
                 }
                 userRows.push([
                     escapeHtml(user.username),

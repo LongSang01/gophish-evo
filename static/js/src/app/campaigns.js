@@ -35,7 +35,7 @@ function launch() {
                 // Validate our fields
                 var send_by_date = $("#send_by_date").val()
                 if (send_by_date != "") {
-                    send_by_date = moment(send_by_date, "MMMM Do YYYY, h:mm a").utc().format()
+                    send_by_date = moment(send_by_date, "YYYY年MM月DD日 A h:mm").utc().format()
                 }
                 campaign = {
                     name: $("#name").val(),
@@ -49,7 +49,7 @@ function launch() {
                     smtps: $.map($("#profile").select2("data"), function (p) {
                         return { name: p.text };
                     }),
-                    launch_date: moment($("#launch_date").val(), "MMMM Do YYYY, h:mm a").utc().format(),
+                    launch_date: moment($("#launch_date").val(), "YYYY年MM月DD日 A h:mm").utc().format(),
                     send_by_date: send_by_date || null,
                     groups: groups,
                 }
@@ -305,7 +305,7 @@ $(document).ready(function () {
         },
         "showTodayButton": true,
         "defaultDate": moment(),
-        "format": "MMMM Do YYYY, h:mm a"
+        "format": "YYYY年MM月DD日 A h:mm"
     })
     $("#send_by_date").datetimepicker({
         "widgetPositioning": {
@@ -313,7 +313,7 @@ $(document).ready(function () {
         },
         "showTodayButton": true,
         "useCurrent": false,
-        "format": "MMMM Do YYYY, h:mm a"
+        "format": "YYYY年MM月DD日 A h:mm"
     })
     // Setup multiple modals
     // Code based on http://miles-by-motorcycle.com/static/bootstrap-modal/index.html
@@ -381,16 +381,16 @@ $(document).ready(function () {
                     //section for tooltips on the status of a campaign to show some quick stats
                     var launchDate;
                     if (moment(campaign.launch_date).isAfter(moment())) {
-                        launchDate = "计划启动：" + moment(campaign.launch_date).format('YYYY-MM-DD HH:mm:ss')
+                        launchDate = "计划启动：" + moment(campaign.launch_date).format('YYYY年MM月DD日 A h:mm:ss')
                         var quickStats = launchDate + "<br><br>" + "收件人数：" + campaign.stats.total
                     } else {
-                        launchDate = "启动时间：" + moment(campaign.launch_date).format('YYYY-MM-DD HH:mm:ss')
+                        launchDate = "启动时间：" + moment(campaign.launch_date).format('YYYY年MM月DD日 A h:mm:ss')
                         var quickStats = launchDate + "<br><br>" + "收件人数：" + campaign.stats.total + "<br><br>" + "已打开：" + campaign.stats.opened + "<br><br>" + "已点击：" + campaign.stats.clicked + "<br><br>" + "已提交凭据：" + campaign.stats.submitted_data + "<br><br>" + "错误：" + campaign.stats.error + "<br><br>" + "已上报：" + campaign.stats.email_reported
                     }
 
                     var row = [
                         escapeHtml(campaign.name),
-                        moment(campaign.created_date).format('YYYY-MM-DD HH:mm:ss'),
+                        moment(campaign.created_date).format('YYYY年MM月DD日 A h:mm:ss'),
                         "<span class=\"label " + label + "\" data-toggle=\"tooltip\" data-placement=\"right\" data-html=\"true\" title=\"" + quickStats + "\">" + campaign.status + "</span>",
                         "<div class='pull-right'><a class='btn btn-primary' href='/campaigns/" + campaign.id + "' data-toggle='tooltip' data-placement='left' title='查看结果'>\
                     <i class='fa fa-bar-chart'></i>\

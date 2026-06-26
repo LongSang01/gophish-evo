@@ -217,7 +217,7 @@ function load() {
                     profileRows.push([
                         escapeHtml(profile.name),
                         profile.interface_type,
-                        moment(profile.modified_date).format('YYYY-MM-DD HH:mm:ss'),
+                        moment(profile.modified_date).format('YYYY年MM月DD日 A h:mm:ss'),
                         "<div class='pull-right'><span data-toggle='modal' data-backdrop='static' data-target='#modal'><button class='btn btn-primary' data-toggle='tooltip' data-placement='left' title='编辑配置' onclick='edit(" + i + ")'>\
                     <i class='fa fa-pencil'></i>\
                     </button></span>\

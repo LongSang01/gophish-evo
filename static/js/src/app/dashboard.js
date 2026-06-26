@@ -239,12 +239,12 @@ function generateTimelineChart(campaigns) {
         xAxis: {
             type: 'datetime',
             dateTimeLabelFormats: {
-                second: '%l:%M:%S',
-                minute: '%l:%M',
-                hour: '%l:%M',
-                day: '%b %d, %Y',
-                week: '%b %d, %Y',
-                month: '%b %Y'
+                second: '%H:%M:%S',
+                minute: '%H:%M',
+                hour: '%H:%M',
+                day: '%Y年%m月%d日',
+                week: '%Y年%m月%d日',
+                month: '%Y年%m月'
             }
         },
         yAxis: {
@@ -256,7 +256,7 @@ function generateTimelineChart(campaigns) {
         },
         tooltip: {
             formatter: function () {
-                return Highcharts.dateFormat('%A, %b %d %l:%M:%S %P', new Date(this.x)) +
+                return moment(this.x).format('YYYY年MM月DD日 A h:mm:ss') +
                     '<br>' + this.point.name + '<br>成功率：<b>' + this.y + '%</b>'
             }
         },
@@ -336,15 +336,15 @@ $(document).ready(function () {
                 });
                 campaignRows = []
                 $.each(campaigns, function (i, campaign) {
-                    var campaign_date = moment(campaign.created_date).format('MMMM Do YYYY, h:mm:ss a')
+                    var campaign_date = moment(campaign.created_date).format('YYYY年MM月DD日 A h:mm:ss')
                     var label = statuses[campaign.status].label || "label-default";
                     //section for tooltips on the status of a campaign to show some quick stats
                     var launchDate;
                     if (moment(campaign.launch_date).isAfter(moment())) {
-                        launchDate = "计划启动：" + moment(campaign.launch_date).format('YYYY-MM-DD HH:mm:ss')
+                        launchDate = "计划启动：" + moment(campaign.launch_date).format('YYYY年MM月DD日 A h:mm:ss')
                         var quickStats = launchDate + "<br><br>" + "收件人数：" + campaign.stats.total
                     } else {
-                        launchDate = "启动时间：" + moment(campaign.launch_date).format('YYYY-MM-DD HH:mm:ss')
+                        launchDate = "启动时间：" + moment(campaign.launch_date).format('YYYY年MM月DD日 A h:mm:ss')
                         var quickStats = launchDate + "<br><br>" + "收件人数：" + campaign.stats.total + "<br><br>" + "已打开：" + campaign.stats.opened + "<br><br>" + "已点击：" + campaign.stats.clicked + "<br><br>" + "已提交凭据：" + campaign.stats.submitted_data + "<br><br>" + "错误：" + campaign.stats.error + "<br><br>" + "已上报：" + campaign.stats.email_reported
                     }
                     // Add it to the list
