@@ -367,16 +367,15 @@ var renderDevice = function (event_details) {
 function renderTimeline(data) {
     record = {
         "id": data[0],
-        "first_name": data[2],
-        "last_name": data[3],
-        "email": data[4],
-        "position": data[5],
-        "status": data[6],
-        "reported": data[7],
-        "send_date": data[8]
+        "full_name": data[2],
+        "email": data[3],
+        "position": data[4],
+        "status": data[5],
+        "reported": data[6],
+        "send_date": data[7]
     }
     results = '<div class="timeline col-sm-12 well well-lg">' +
-        '<h6>时间线：' + escapeHtml(record.first_name) + ' ' + escapeHtml(record.last_name) +
+        '<h6>时间线：' + escapeHtml(record.full_name) +
         '</h6><span class="subtitle">邮箱：' + escapeHtml(record.email) +
         '<br>结果ID：' + escapeHtml(record.id) + '</span>' +
         '<div class="timeline-graph col-sm-6">'
@@ -697,9 +696,9 @@ function poll() {
                 var rid = rowData[0]
                 $.each(campaign.results, function (j, result) {
                     if (result.id == rid) {
-                        rowData[8] = moment(result.send_date).format('MMMM Do YYYY, h:mm:ss a')
-                        rowData[7] = result.reported
-                        rowData[6] = result.status
+                        rowData[7] = moment(result.send_date).format('MMMM Do YYYY, h:mm:ss a')
+                        rowData[6] = result.reported
+                        rowData[5] = result.status
                         resultsTable.row(i).data(rowData)
                         if (row.child.isShown()) {
                             $(row.node()).find("#caret").removeClass("fa-caret-right")
@@ -764,13 +763,13 @@ function load() {
                             "targets": [1]
                         }, {
                             "visible": false,
-                            "targets": [0, 8]
+                            "targets": [0, 7]
                         },
                         {
                             "render": function (data, type, row) {
-                                return createStatusLabel(data, row[8])
+                                return createStatusLabel(data, row[7])
                             },
-                            "targets": [6]
+                            "targets": [5]
                         },
                         {
                             className: "text-center",
@@ -783,7 +782,7 @@ function load() {
                                 }
                                 return reported
                             },
-                            "targets": [7]
+                            "targets": [6]
                         }
                     ]
                 });
@@ -797,8 +796,7 @@ function load() {
                     resultsTable.row.add([
                         result.id,
                         "<i id=\"caret\" class=\"fa fa-caret-right\"></i>",
-                        escapeHtml(result.first_name) || "",
-                        escapeHtml(result.last_name) || "",
+                        escapeHtml(result.full_name) || "",
                         escapeHtml(result.email) || "",
                         escapeHtml(result.position) || "",
                         result.status,

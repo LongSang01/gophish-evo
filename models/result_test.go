@@ -19,9 +19,8 @@ func (s *ModelsSuite) TestGenerateResultId(c *check.C) {
 func (s *ModelsSuite) TestFormatAddress(c *check.C) {
 	r := Result{
 		BaseRecipient: BaseRecipient{
-			FirstName: "John",
-			LastName:  "Doe",
-			Email:     "johndoe@example.com",
+			FullName: "John Doe",
+			Email:    "johndoe@example.com",
 		},
 	}
 	expected := &mail.Address{
@@ -78,9 +77,9 @@ func (s *ModelsSuite) TestResultVariableStatus(ch *check.C) {
 func (s *ModelsSuite) TestDuplicateResults(ch *check.C) {
 	group := Group{Name: "Test Group"}
 	group.Targets = []Target{
-		Target{BaseRecipient: BaseRecipient{Email: "test1@example.com", FirstName: "First", LastName: "Example"}},
-		Target{BaseRecipient: BaseRecipient{Email: "test1@example.com", FirstName: "Duplicate", LastName: "Duplicate"}},
-		Target{BaseRecipient: BaseRecipient{Email: "test2@example.com", FirstName: "Second", LastName: "Example"}},
+		Target{BaseRecipient: BaseRecipient{Email: "test1@example.com", FullName: "First Example"}},
+		Target{BaseRecipient: BaseRecipient{Email: "test1@example.com", FullName: "Duplicate"}},
+		Target{BaseRecipient: BaseRecipient{Email: "test2@example.com", FullName: "Second Example"}},
 	}
 	group.UserId = 1
 	ch.Assert(PostGroup(&group), check.Equals, nil)

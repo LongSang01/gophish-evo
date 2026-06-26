@@ -5,46 +5,41 @@ var TEMPLATE_TAGS = [{
     },
     {
         id: 2,
-        name: 'FirstName',
-        description: '收件人的名字。'
+        name: 'FullName',
+        description: '收件人的姓名。'
     },
     {
         id: 3,
-        name: 'LastName',
-        description: '收件人的姓氏。'
-    },
-    {
-        id: 4,
         name: 'Position',
         description: '收件人的职位。'
     },
     {
-        id: 5,
+        id: 4,
         name: 'From',
         description: '邮件的发件地址。'
     },
     {
-        id: 6,
+        id: 5,
         name: 'TrackingURL',
         description: '用于追踪邮件是否被打开的URL。'
     },
     {
-        id: 7,
+        id: 6,
         name: 'Tracker',
         description: '添加隐藏追踪图片的HTML标签（推荐替代TrackingURL）。'
     },
     {
-        id: 8,
+        id: 7,
         name: 'URL',
         description: '您的Gophish监听器URL。'
     },
     {
-        id: 9,
+        id: 8,
         name: 'BaseURL',
         description: '去除路径和rid参数的基础URL，适用于静态文件链接。'
     },
     {
-        id: 10,
+        id: 9,
         name: 'QRCode',
         description: '链接到钓鱼URL的二维码图片。'
     }

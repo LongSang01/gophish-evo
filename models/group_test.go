@@ -128,50 +128,46 @@ func (s *ModelsSuite) TestPutGroup(c *check.C) {
 	// Add test group.
 	group := Group{Name: "Test Group"}
 	group.Targets = []Target{
-		Target{BaseRecipient: BaseRecipient{Email: "test1@example.com", FirstName: "First", LastName: "Example"}},
-		Target{BaseRecipient: BaseRecipient{Email: "test2@example.com", FirstName: "Second", LastName: "Example"}},
+		Target{BaseRecipient: BaseRecipient{Email: "test1@example.com", FullName: "First Example"}},
+		Target{BaseRecipient: BaseRecipient{Email: "test2@example.com", FullName: "Second Example"}},
 	}
 	group.UserId = 1
 	PostGroup(&group)
 
 	// Update one of group's targets.
-	group.Targets[0].FirstName = "Updated"
+	group.Targets[0].FullName = "Updated"
 	err := PutGroup(&group)
 	c.Assert(err, check.Equals, nil)
 
 	// Verify updated target information.
 	targets, _ := GetTargets(group.Id)
 	c.Assert(targets[0].Email, check.Equals, "test1@example.com")
-	c.Assert(targets[0].FirstName, check.Equals, "Updated")
-	c.Assert(targets[0].LastName, check.Equals, "Example")
+	c.Assert(targets[0].FullName, check.Equals, "Updated")
 	c.Assert(targets[1].Email, check.Equals, "test2@example.com")
-	c.Assert(targets[1].FirstName, check.Equals, "Second")
-	c.Assert(targets[1].LastName, check.Equals, "Example")
+	c.Assert(targets[1].FullName, check.Equals, "Second Example")
 }
 
 func (s *ModelsSuite) TestPutGroupEmptyAttribute(c *check.C) {
 	// Add test group.
 	group := Group{Name: "Test Group"}
 	group.Targets = []Target{
-		Target{BaseRecipient: BaseRecipient{Email: "test1@example.com", FirstName: "First", LastName: "Example"}},
-		Target{BaseRecipient: BaseRecipient{Email: "test2@example.com", FirstName: "Second", LastName: "Example"}},
+		Target{BaseRecipient: BaseRecipient{Email: "test1@example.com", FullName: "First Example"}},
+		Target{BaseRecipient: BaseRecipient{Email: "test2@example.com", FullName: "Second Example"}},
 	}
 	group.UserId = 1
 	PostGroup(&group)
 
 	// Update one of group's targets.
-	group.Targets[0].FirstName = ""
+	group.Targets[0].FullName = ""
 	err := PutGroup(&group)
 	c.Assert(err, check.Equals, nil)
 
 	// Verify updated empty attribute was saved.
 	targets, _ := GetTargets(group.Id)
 	c.Assert(targets[0].Email, check.Equals, "test1@example.com")
-	c.Assert(targets[0].FirstName, check.Equals, "")
-	c.Assert(targets[0].LastName, check.Equals, "Example")
+	c.Assert(targets[0].FullName, check.Equals, "")
 	c.Assert(targets[1].Email, check.Equals, "test2@example.com")
-	c.Assert(targets[1].FirstName, check.Equals, "Second")
-	c.Assert(targets[1].LastName, check.Equals, "Example")
+	c.Assert(targets[1].FullName, check.Equals, "Second Example")
 }
 
 func benchmarkPostGroup(b *testing.B, iter, size int) {
@@ -182,9 +178,8 @@ func benchmarkPostGroup(b *testing.B, iter, size int) {
 	for i := 0; i < size; i++ {
 		g.Targets = append(g.Targets, Target{
 			BaseRecipient: BaseRecipient{
-				FirstName: "User",
-				LastName:  fmt.Sprintf("%d", i),
-				Email:     fmt.Sprintf("test-%d@test.com", i),
+				FullName: fmt.Sprintf("User %d", i),
+				Email:    fmt.Sprintf("test-%d@test.com", i),
 			},
 		})
 	}
@@ -205,9 +200,8 @@ func benchmarkPutGroup(b *testing.B, iter, size int) {
 	for i := 0; i < size; i++ {
 		g.Targets = append(g.Targets, Target{
 			BaseRecipient: BaseRecipient{
-				FirstName: "User",
-				LastName:  fmt.Sprintf("%d", i),
-				Email:     fmt.Sprintf("test-%d@test.com", i),
+				FullName: fmt.Sprintf("User %d", i),
+				Email:    fmt.Sprintf("test-%d@test.com", i),
 			},
 		})
 	}

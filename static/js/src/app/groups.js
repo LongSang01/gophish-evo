@@ -5,10 +5,9 @@ function save(id) {
     var targets = []
     $.each($("#targetsTable").DataTable().rows().data(), function (i, target) {
         targets.push({
-            first_name: unescapeHtml(target[0]),
-            last_name: unescapeHtml(target[1]),
-            email: unescapeHtml(target[2]),
-            position: unescapeHtml(target[3])
+            full_name: unescapeHtml(target[0]),
+            email: unescapeHtml(target[1]),
+            position: unescapeHtml(target[2])
         })
     })
     var group = {
@@ -74,8 +73,7 @@ function edit(id) {
                 targetRows = []
                 $.each(group.targets, function (i, record) {
                   targetRows.push([
-                      escapeHtml(record.first_name),
-                      escapeHtml(record.last_name),
+                      escapeHtml(record.full_name),
                       escapeHtml(record.email),
                       escapeHtml(record.position),
                       '<span style="cursor:pointer;"><i class="fa fa-trash-o"></i></span>'
@@ -107,8 +105,7 @@ function edit(id) {
         done: function (e, data) {
             $.each(data.result, function (i, record) {
                 addTarget(
-                    record.first_name,
-                    record.last_name,
+                    record.full_name,
                     record.email,
                     record.position);
             });
@@ -119,8 +116,7 @@ function edit(id) {
 
 var downloadCSVTemplate = function () {
     var csvScope = [{
-        'First Name': 'Example',
-        'Last Name': 'User',
+        'Full Name': 'Example User',
         'Email': 'foobar@example.com',
         'Position': 'Systems Administrator'
     }]
@@ -185,12 +181,11 @@ var deleteGroup = function (id) {
     })
 }
 
-function addTarget(firstNameInput, lastNameInput, emailInput, positionInput) {
+function addTarget(fullNameInput, emailInput, positionInput) {
     // Create new data row.
     var email = escapeHtml(emailInput).toLowerCase();
     var newRow = [
-        escapeHtml(firstNameInput),
-        escapeHtml(lastNameInput),
+        escapeHtml(fullNameInput),
         email,
         escapeHtml(positionInput),
         '<span style="cursor:pointer;"><i class="fa fa-trash-o"></i></span>'
@@ -199,9 +194,9 @@ function addTarget(firstNameInput, lastNameInput, emailInput, positionInput) {
     // Check table to see if email already exists.
     var targetsTable = targets.DataTable();
     var existingRowIndex = targetsTable
-        .column(2, {
+        .column(1, {
             order: "index"
-        }) // Email column has index of 2
+        }) // Email column has index of 1
         .data()
         .indexOf(email);
     // Update or add new row as necessary.
@@ -271,15 +266,14 @@ $(document).ready(function () {
             return
         }
         addTarget(
-            $("#firstName").val(),
-            $("#lastName").val(),
+            $("#fullName").val(),
             $("#email").val(),
             $("#position").val());
         targets.DataTable().draw();
 
         // Reset user input.
         $("#targetForm>div>input").val('');
-        $("#firstName").focus();
+        $("#fullName").focus();
         return false;
     });
     // Handle Deletion

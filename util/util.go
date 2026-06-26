@@ -16,6 +16,7 @@ import (
 	"net/mail"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	log "github.com/gophish/gophish/logger"
@@ -24,10 +25,9 @@ import (
 )
 
 var (
-	firstNameRegex = regexp.MustCompile(`(?i)first[\s_-]*name`)
-	lastNameRegex  = regexp.MustCompile(`(?i)last[\s_-]*name`)
-	emailRegex     = regexp.MustCompile(`(?i)email`)
-	positionRegex  = regexp.MustCompile(`(?i)position`)
+	fullNameRegex = regexp.MustCompile(`(?i)full[\s_-]*name`)
+	emailRegex    = regexp.MustCompile(`(?i)email`)
+	positionRegex = regexp.MustCompile(`(?i)position`)
 )
 
 // ParseMail takes in an HTTP Request and returns an Email object
@@ -68,25 +68,25 @@ func ParseCSV(r *http.Request) ([]models.Target, error) {
 		}
 		fi := -1
 		li := -1
+		fnIdx := -1
 		ei := -1
 		pi := -1
 		fn := ""
 		ln := ""
+		fullNm := ""
 		ea := ""
 		ps := ""
 		for i, v := range record {
 			switch {
-			case firstNameRegex.MatchString(v):
-				fi = i
-			case lastNameRegex.MatchString(v):
-				li = i
+			case fullNameRegex.MatchString(v):
+				fnIdx = i
 			case emailRegex.MatchString(v):
 				ei = i
 			case positionRegex.MatchString(v):
 				pi = i
 			}
 		}
-		if fi == -1 && li == -1 && ei == -1 && pi == -1 {
+		if fnIdx == -1 && fi == -1 && li == -1 && ei == -1 && pi == -1 {
 			continue
 		}
 		for {
@@ -94,11 +94,17 @@ func ParseCSV(r *http.Request) ([]models.Target, error) {
 			if err == io.EOF {
 				break
 			}
+			if fnIdx != -1 && len(record) > fnIdx {
+				fullNm = record[fnIdx]
+			}
 			if fi != -1 && len(record) > fi {
 				fn = record[fi]
 			}
 			if li != -1 && len(record) > li {
 				ln = record[li]
+			}
+			if fullNm == "" && (fn != "" || ln != "") {
+				fullNm = strings.TrimSpace(fn + " " + ln)
 			}
 			if ei != -1 && len(record) > ei {
 				csvEmail, err := mail.ParseAddress(record[ei])
@@ -112,10 +118,9 @@ func ParseCSV(r *http.Request) ([]models.Target, error) {
 			}
 			t := models.Target{
 				BaseRecipient: models.BaseRecipient{
-					FirstName: fn,
-					LastName:  ln,
-					Email:     ea,
-					Position:  ps,
+					FullName: fullNm,
+					Email:    ea,
+					Position: ps,
 				},
 			}
 			ts = append(ts, t)

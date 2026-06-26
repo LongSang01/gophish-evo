@@ -16,10 +16,9 @@ import (
 func (s *ModelsSuite) TestAttachment(c *check.C) {
 	ptx := PhishingTemplateContext{
 		BaseRecipient: BaseRecipient{
-			FirstName: "Foo",
-			LastName:  "Bar",
-			Email:     "foo@bar.com",
-			Position:  "Space Janitor",
+			FullName: "Foo Bar",
+			Email:    "foo@bar.com",
+			Position: "Space Janitor",
 		},
 		BaseURL:     "http://testurl.com",
 		URL:         "http://testurl.com/?rid=1234567",

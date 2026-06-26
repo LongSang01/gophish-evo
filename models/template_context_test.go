@@ -22,9 +22,8 @@ func (m mockTemplateContext) getBaseURL() string {
 func (s *ModelsSuite) TestNewTemplateContext(c *check.C) {
 	r := Result{
 		BaseRecipient: BaseRecipient{
-			FirstName: "Foo",
-			LastName:  "Bar",
-			Email:     "foo@bar.com",
+			FullName: "Foo Bar",
+			Email:    "foo@bar.com",
 		},
 		RId: "1234567",
 	}

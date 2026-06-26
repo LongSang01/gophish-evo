@@ -1,8 +1,6 @@
 The target's unique ID: 1234567
 
-The target's first name: Foo
-
-The target's last name: Bar
+The target's full name: Foo Bar
 
 The target's position: Space Janitor
 
