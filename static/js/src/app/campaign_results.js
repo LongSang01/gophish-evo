@@ -370,9 +370,9 @@ function renderTimeline(data) {
         "full_name": data[2],
         "email": data[3],
         "position": data[4],
-        "status": data[5],
-        "reported": data[6],
-        "send_date": data[7]
+        "status": data[6],
+        "reported": data[7],
+        "send_date": data[8]
     }
     results = '<div class="timeline col-sm-12 well well-lg">' +
         '<h6>时间线：' + escapeHtml(record.full_name) +
@@ -696,9 +696,20 @@ function poll() {
                 var rid = rowData[0]
                 $.each(campaign.results, function (j, result) {
                     if (result.id == rid) {
-                        rowData[7] = moment(result.send_date).format('MMMM Do YYYY, h:mm:ss a')
-                        rowData[6] = result.reported
-                        rowData[5] = result.status
+                        // 查找该结果对应的发件邮箱地址
+                        var smtpFromAddress = ""
+                        if (campaign.smtps && result.smtp_id) {
+                            $.each(campaign.smtps, function (k, smtp) {
+                                if (smtp.id == result.smtp_id) {
+                                    smtpFromAddress = smtp.from_address || ""
+                                    return false
+                                }
+                            })
+                        }
+                        rowData[8] = moment(result.send_date).format('MMMM Do YYYY, h:mm:ss a')
+                        rowData[7] = result.reported
+                        rowData[6] = result.status
+                        rowData[5] = escapeHtml(smtpFromAddress) || ""
                         resultsTable.row(i).data(rowData)
                         if (row.child.isShown()) {
                             $(row.node()).find("#caret").removeClass("fa-caret-right")
@@ -763,13 +774,13 @@ function load() {
                             "targets": [1]
                         }, {
                             "visible": false,
-                            "targets": [0, 7]
+                            "targets": [0, 8]
                         },
                         {
                             "render": function (data, type, row) {
-                                return createStatusLabel(data, row[7])
+                                return createStatusLabel(data, row[8])
                             },
-                            "targets": [5]
+                            "targets": [6]
                         },
                         {
                             className: "text-center",
@@ -782,7 +793,7 @@ function load() {
                                 }
                                 return reported
                             },
-                            "targets": [6]
+                            "targets": [7]
                         }
                     ]
                 });
@@ -793,12 +804,23 @@ function load() {
                     email_series_data[k] = 0
                 });
                 $.each(campaign.results, function (i, result) {
+                    // 查找该结果对应的发件邮箱地址
+                    var smtpFromAddress = ""
+                    if (campaign.smtps && result.smtp_id) {
+                        $.each(campaign.smtps, function (j, smtp) {
+                            if (smtp.id == result.smtp_id) {
+                                smtpFromAddress = smtp.from_address || ""
+                                return false
+                            }
+                        })
+                    }
                     resultsTable.row.add([
                         result.id,
                         "<i id=\"caret\" class=\"fa fa-caret-right\"></i>",
                         escapeHtml(result.full_name) || "",
                         escapeHtml(result.email) || "",
                         escapeHtml(result.position) || "",
+                        escapeHtml(smtpFromAddress) || "",
                         result.status,
                         result.reported,
                         moment(result.send_date).format('MMMM Do YYYY, h:mm:ss a')

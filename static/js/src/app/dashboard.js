@@ -90,6 +90,14 @@ var statsMapping = {
     "submitted_data": "已提交数据",
 }
 
+var statsColorMapping = {
+    "sent": "#1abc9c",
+    "opened": "#f9bf3b",
+    "email_reported": "#45d6ef",
+    "clicked": "#F39C12",
+    "submitted_data": "#f05b4f",
+}
+
 function deleteCampaign(idx) {
     if (confirm("确认删除 " + campaigns[idx].name + " ？")) {
         api.campaignId.delete(campaigns[idx].id)
@@ -196,7 +204,7 @@ function generateStatsPieCharts(campaigns) {
             title: status_label,
             name: status,
             data: stats_data,
-            colors: [statuses[status_label].color, "#dddddd"]
+            colors: [statsColorMapping[status], "#dddddd"]
         })
 
         stats_data = []

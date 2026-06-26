@@ -41,6 +41,7 @@ type CampaignResults struct {
 	Status  string   `json:"status"`
 	Results []Result `json:"results,omitempty"`
 	Events  []Event  `json:"timeline,omitempty"`
+	SMTPs   []SMTP   `json:"smtps,omitempty"`
 }
 
 // CampaignSummaries is a struct representing the overview of campaigns
@@ -439,6 +440,11 @@ func GetCampaignResults(id int64, uid int64) (CampaignResults, error) {
 	if err != nil {
 		log.Errorf("%s: events not found for campaign", err)
 		return cr, err
+	}
+	// Load the SMTP sending profiles associated with this campaign
+	cr.SMTPs, err = GetCampaignSMTPRecords(cr.Id)
+	if err != nil {
+		log.Warnf("%s: smtps not found for campaign", err)
 	}
 	return cr, err
 }
