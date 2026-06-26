@@ -4,11 +4,13 @@ on:
   release:
     types: [created]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Binary
     runs-on: ${{ matrix.os }}
-
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest]
@@ -24,34 +26,36 @@ jobs:
             releaseos: linux
 
     steps:
-      - name: Set up Go
-        uses: actions/setup-go@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          go-version: 1.22
+          go-version: "1.26"
 
-      - if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y gcc-multilib
-
-      - if: matrix.arch == 'amd64'
-        run: echo "RELEASE=gophish-${{ github.event.release.tag_name }}-${{ matrix.releaseos }}-64bit" >> $GITHUB_ENV
-
-      - if: matrix.os == 'windows-latest'
-        run: echo "RELEASE=gophish-${{ github.event.release.tag_name }}-${{ matrix.releaseos }}-64bit" | Out-File -FilePath $env:GITHUB_ENV -Append
-
-      - uses: actions/checkout@v4
-
-      - name: Build ${{ matrix.goos }}/${{ matrix.arch }}
+      - name: Build binary
         run: go build -o ${{ matrix.bin }}
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 1
 
-      - name: Upload to artifacts
+      - name: Prepare artifact name (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: echo "RELEASE=gophish-${{ github.event.release.tag_name }}-${{ matrix.releaseos }}-64bit" >> $GITHUB_ENV
+
+      - name: Prepare artifact name (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: echo "RELEASE=gophish-${{ github.event.release.tag_name }}-${{ matrix.releaseos }}-64bit" >> $env:GITHUB_ENV
+
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.RELEASE }}
           path: ${{ matrix.bin }}
+          retention-days: 1
 
   package:
     name: Package Assets
@@ -61,21 +65,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
         with:
           path: bin
 
-      - name: Package Releases
+      - name: Create release packages
         run: |
-          mkdir releases;
-          for RELEASE_DIR in bin/*
-          do
-            echo "Creating release $RELEASE_DIR"
-            for BINARY in $RELEASE_DIR/*
-            do
-              cp $BINARY .;
-              zip -r releases/$(basename $RELEASE_DIR).zip \
-                $(basename ${BINARY}) \
+          mkdir -p releases
+          for dir in bin/*; do
+            for file in $dir/*; do
+              binname=$(basename "$file")
+              release_name=$(basename "$dir")
+              cp "$file" .
+              zip -r "releases/${release_name}.zip" \
+                "$binname" \
                 static/js/dist \
                 static/js/src/vendor/ckeditor \
                 static/css/dist \
@@ -87,65 +91,39 @@ jobs:
                 README.md \
                 VERSION \
                 LICENSE \
-                config.json;
-              rm $BINARY;
+                config.json
+              rm "$binname"
             done
           done
 
-      - name: Upload to artifacts
+      - name: Generate SHA256 checksums
+        run: |
+          cd releases
+          sha256sum *.zip > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Upload packaged artifacts
         uses: actions/upload-artifact@v4
         with:
           name: releases
-          path: releases/*.zip
+          path: releases/
+          retention-days: 1
 
-  upload:
-    name: Upload to the Release
+  release:
+    name: Publish GitHub Release
     runs-on: ubuntu-latest
     needs: package
 
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download release assets
+        uses: actions/download-artifact@v4
         with:
           name: releases
           path: releases/
 
-      - name: Upload Archives to Release
-        env:
-          UPLOAD_URL: ${{ github.event.release.upload_url }}
-          API_HEADER: "Accept: application/vnd.github.v3+json"
-          AUTH_HEADER: "Authorization: token ${{ secrets.GITHUB_TOKEN }}"
-        run: |
-          UPLOAD_URL=$(echo -n $UPLOAD_URL | sed s/\{.*//g)
-          for FILE in releases/*
-          do
-            echo "Uploading ${FILE}";
-            curl \
-              -H "${API_HEADER}" \
-              -H "${AUTH_HEADER}" \
-              -H "Content-Type: $(file -b --mime-type ${FILE})" \
-              --data-binary "@${FILE}" \
-              "${UPLOAD_URL}?name=$(basename ${FILE})";
-          done
-
-      - name: Generate SHA256 Hashes
-        env:
-          API_HEADER: "Accept: application/vnd.github.v3+json"
-          AUTH_HEADER: "Authorization: token ${{ secrets.GITHUB_TOKEN }}"
-          RELEASE_URL: ${{ github.event.release.url }}
-        run: |
-          HASH_TABLE="| SHA256 Hash | Filename |"
-          HASH_TABLE="${HASH_TABLE}\n|-----|-----|\n"
-          for FILE in releases/*
-          do
-            FILENAME=$(basename ${FILE})
-            HASH=$(sha256sum ${FILE} | cut -d ' ' -f 1)
-            HASH_TABLE="${HASH_TABLE}|${HASH}|${FILENAME}|\n"
-          done
-          echo "${HASH_TABLE}"
-          curl \
-            -XPATCH \
-            -H "${API_HEADER}" \
-            -H "${AUTH_HEADER}" \
-            -H "Content-Type: application/json" \
-            -d "{\"body\": \"${HASH_TABLE}\"}" \
-            "${RELEASE_URL}";
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            releases/*.zip
+            releases/SHA256SUMS
