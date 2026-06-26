@@ -170,6 +170,13 @@ function edit(idx) {
 }
 
 function copy(idx) {
+    headers = $("#headersTable").dataTable({
+        destroy: true,
+        columnDefs: [{
+            orderable: false,
+            targets: "no-sort"
+        }]
+    })
     $("#modalSubmit").unbind('click').click(function () {
         save(-1)
     })
@@ -182,6 +189,9 @@ function copy(idx) {
     $("#username").val(profile.username)
     $("#password").val(profile.password)
     $("#ignore_cert_errors").prop("checked", profile.ignore_cert_errors)
+    $.each(profile.headers, function (i, record) {
+        addCustomHeader(record.key, record.value)
+    });
 }
 
 function load() {
