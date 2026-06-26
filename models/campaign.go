@@ -30,6 +30,7 @@ type Campaign struct {
 	Events        []Event   `json:"timeline,omitempty"`
 	SMTPId        int64     `json:"-"`
 	SMTP          SMTP      `json:"smtp"`
+	SMTPs         []SMTP    `json:"smtps,omitempty" gorm:"-"`
 	URL           string    `json:"url"`
 }
 
@@ -140,7 +141,7 @@ func (c *Campaign) Validate() error {
 		return ErrTemplateNotSpecified
 	case c.Page.Name == "":
 		return ErrPageNotSpecified
-	case c.SMTP.Name == "":
+	case c.SMTP.Name == "" && len(c.SMTPs) == 0:
 		return ErrSMTPNotSpecified
 	case !c.SendByDate.IsZero() && !c.LaunchDate.IsZero() && c.SendByDate.Before(c.LaunchDate):
 		return ErrInvalidSendByDate
@@ -225,6 +226,12 @@ func (c *Campaign) getDetails() error {
 	if err != nil && err != gorm.ErrRecordNotFound {
 		log.Warn(err)
 		return err
+	}
+
+	// Load multiple SMTPs from campaign_smtps join table
+	c.SMTPs, err = GetCampaignSMTPRecords(c.Id)
+	if err != nil {
+		log.Warn(err)
 	}
 	return nil
 }
@@ -391,6 +398,12 @@ func GetCampaignMailContext(id int64, uid int64) (Campaign, error) {
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return c, err
 	}
+
+	// Load multiple SMTPs from campaign_smtps join table
+	c.SMTPs, err = GetCampaignSMTPRecords(c.Id)
+	if err != nil {
+		log.Warn(err)
+	}
 	return c, nil
 }
 
@@ -513,30 +526,69 @@ func PostCampaign(c *Campaign, uid int64) error {
 	}
 	c.Page = p
 	c.PageId = p.Id
-	// Check to make sure the sending profile exists
-	s, err := GetSMTPByName(c.SMTP.Name, uid)
-	if err == gorm.ErrRecordNotFound {
-		log.WithFields(logrus.Fields{
-			"smtp": c.SMTP.Name,
-		}).Error("Sending profile does not exist")
-		return ErrSMTPNotFound
-	} else if err != nil {
-		log.Error(err)
-		return err
+	// Check to make sure the sending profile(s) exist.
+	// Support both the legacy single SMTP (c.SMTP.Name) and the new
+	// multi-SMTP (c.SMTPs) payload.  When SMTPs is provided it takes
+	// precedence; otherwise we fall back to the single SMTP.
+	var resolvedSMTPs []SMTP
+	if len(c.SMTPs) > 0 {
+		seen := make(map[string]bool)
+		for _, sReq := range c.SMTPs {
+			if seen[sReq.Name] {
+				continue // deduplicate
+			}
+			seen[sReq.Name] = true
+			s, err := GetSMTPByName(sReq.Name, uid)
+			if err == gorm.ErrRecordNotFound {
+				log.WithFields(logrus.Fields{"smtp": sReq.Name}).Error("Sending profile does not exist")
+				return ErrSMTPNotFound
+			} else if err != nil {
+				log.Error(err)
+				return err
+			}
+			resolvedSMTPs = append(resolvedSMTPs, s)
+		}
+		// For backward-compat, also set the primary SMTP fields
+		c.SMTP = resolvedSMTPs[0]
+		c.SMTPId = resolvedSMTPs[0].Id
+	} else {
+		s, err := GetSMTPByName(c.SMTP.Name, uid)
+		if err == gorm.ErrRecordNotFound {
+			log.WithFields(logrus.Fields{"smtp": c.SMTP.Name}).Error("Sending profile does not exist")
+			return ErrSMTPNotFound
+		} else if err != nil {
+			log.Error(err)
+			return err
+		}
+		c.SMTP = s
+		c.SMTPId = s.Id
+		resolvedSMTPs = []SMTP{s}
 	}
-	c.SMTP = s
-	c.SMTPId = s.Id
 	// Insert into the DB
 	err = db.Save(c).Error
 	if err != nil {
 		log.Error(err)
 		return err
 	}
+	// Save campaign_smtps join table records
+	smtpIds := make([]int64, len(resolvedSMTPs))
+	for i, s := range resolvedSMTPs {
+		smtpIds[i] = s.Id
+	}
+	if err := PostCampaignSMTPs(db, c.Id, smtpIds); err != nil {
+		log.Error(err)
+		return err
+	}
+	c.SMTPs = resolvedSMTPs
 	err = AddEvent(&Event{Message: "Campaign Created"}, c.Id)
 	if err != nil {
 		log.Error(err)
 	}
 	// Insert all the results
+	// Assignment order: recipients are numbered 0, 1, 2, ... in the order
+	// they appear across groups (group order = user-defined, within-group
+	// order = import order).  Each recipient is assigned to the SMTP at
+	// position  recipientIndex % len(resolvedSMTPs)  (round-robin).
 	resultMap := make(map[string]bool)
 	recipientIndex := 0
 	tx := db.Begin()
@@ -550,12 +602,14 @@ func PostCampaign(c *Campaign, uid int64) error {
 			}
 			resultMap[t.Email] = true
 			sendDate := c.generateSendDate(recipientIndex, totalRecipients)
+			assignedSMTP := resolvedSMTPs[recipientIndex%len(resolvedSMTPs)]
 			r := &Result{
 				BaseRecipient: BaseRecipient{
 					Email:    t.Email,
 					Position: t.Position,
 					FullName: t.FullName,
 				},
+				SMTPId:       assignedSMTP.Id,
 				Status:       StatusScheduled,
 				CampaignId:   c.Id,
 				UserId:       c.UserId,
@@ -586,6 +640,7 @@ func PostCampaign(c *Campaign, uid int64) error {
 			log.WithFields(logrus.Fields{
 				"email":     r.Email,
 				"send_date": sendDate,
+				"smtp_id":   assignedSMTP.Id,
 			}).Debug("creating maillog")
 			m := &MailLog{
 				UserId:     c.UserId,
@@ -613,8 +668,13 @@ func DeleteCampaign(id int64) error {
 	log.WithFields(logrus.Fields{
 		"campaign_id": id,
 	}).Info("Deleting campaign")
+	// Delete campaign_smtps join records
+	err := DeleteCampaignSMTPsByCampaign(id)
+	if err != nil {
+		log.Error(err)
+	}
 	// Delete all the campaign results
-	err := db.Where("campaign_id=?", id).Delete(&Result{}).Error
+	err = db.Where("campaign_id=?", id).Delete(&Result{}).Error
 	if err != nil {
 		log.Error(err)
 		return err

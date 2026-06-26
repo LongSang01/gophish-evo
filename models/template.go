@@ -2,7 +2,6 @@ package models
 
 import (
 	"errors"
-	"net/mail"
 	"time"
 
 	log "github.com/gophish/gophish/logger"
@@ -28,18 +27,15 @@ var ErrTemplateNameNotSpecified = errors.New("Template name not specified")
 // ErrTemplateMissingParameter is thrown when a needed parameter is not provided
 var ErrTemplateMissingParameter = errors.New("Need to specify at least plaintext or HTML content")
 
-// Validate checks the given template to make sure values are appropriate and complete
+// Validate checks the given template to make sure values are appropriate and complete.
+// EnvelopeSender may contain a plain display name (e.g. "Alice"), a full
+// address (e.g. "Alice <alice@example.com>"), or be left empty.
 func (t *Template) Validate() error {
 	switch {
 	case t.Name == "":
 		return ErrTemplateNameNotSpecified
 	case t.Text == "" && t.HTML == "":
 		return ErrTemplateMissingParameter
-	case t.EnvelopeSender != "":
-		_, err := mail.ParseAddress(t.EnvelopeSender)
-		if err != nil {
-			return err
-		}
 	}
 	if err := ValidateTemplate(t.HTML); err != nil {
 		return err

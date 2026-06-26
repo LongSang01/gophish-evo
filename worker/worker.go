@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	log "github.com/gophish/gophish/logger"
@@ -59,11 +60,12 @@ func (w *DefaultWorker) processCampaigns(t time.Time) error {
 		return err
 	}
 	campaignCache := make(map[int64]models.Campaign)
-	// We'll group the maillogs by campaign ID to (roughly) group
-	// them by sending profile. This lets the mailer re-use the Sender
-	// instead of having to re-connect to the SMTP server for every
-	// email.
-	msg := make(map[int64][]mailer.Mail)
+	// smtpIdCache maps campaignId → {rid → smtpId} for batch lookups.
+	smtpIdCache := make(map[int64]map[string]int64)
+	// We group the maillogs by (campaignId, smtpId) so that each batch
+	// can be sent through a single SMTP connection.  The composite key
+	// is "campaignId:smtpId".
+	msg := make(map[string][]mailer.Mail)
 	for _, m := range ms {
 		// We cache the campaign here to greatly reduce the time it takes to
 		// generate the message (ref #1726)
@@ -76,25 +78,51 @@ func (w *DefaultWorker) processCampaigns(t time.Time) error {
 			campaignCache[c.Id] = c
 		}
 		m.CacheCampaign(&c)
-		msg[m.CampaignId] = append(msg[m.CampaignId], m)
+
+		// Determine the SMTPId for this maillog's recipient.
+		smtpIdMap, ok := smtpIdCache[m.CampaignId]
+		if !ok {
+			smtpIdMap, err = models.GetResultSMTPIdMap(m.CampaignId)
+			if err != nil {
+				log.Warn(err)
+				smtpIdMap = map[string]int64{}
+			}
+			smtpIdCache[m.CampaignId] = smtpIdMap
+		}
+		smtpId := smtpIdMap[m.RId]
+		if smtpId == 0 {
+			smtpId = c.SMTPId // legacy fallback
+		}
+		key := fmt.Sprintf("%d:%d", m.CampaignId, smtpId)
+		msg[key] = append(msg[key], m)
 	}
 
+	// Track which campaigns we've already marked as In-progress to
+	// avoid redundant status updates when multiple SMTP groups belong
+	// to the same campaign.
+	campaignStarted := make(map[int64]bool)
+
 	// Next, we process each group of maillogs in parallel
-	for cid, msc := range msg {
-		go func(cid int64, msc []mailer.Mail) {
-			c := campaignCache[cid]
-			if c.Status == models.CampaignQueued {
-				err := c.UpdateStatus(models.CampaignInProgress)
-				if err != nil {
-					log.Error(err)
-					return
-				}
+	for key, msc := range msg {
+		// Extract campaignId from the first entry in the group.
+		firstML := msc[0].(*models.MailLog)
+		cid := firstML.CampaignId
+		c := campaignCache[cid]
+		if c.Status == models.CampaignQueued && !campaignStarted[cid] {
+			campaignStarted[cid] = true
+			err := c.UpdateStatus(models.CampaignInProgress)
+			if err != nil {
+				log.Error(err)
+				return err
 			}
+		}
+		go func(key string, msc []mailer.Mail) {
 			log.WithFields(logrus.Fields{
 				"num_emails": len(msc),
+				"group_key":  key,
 			}).Info("Sending emails to mailer for processing")
 			w.mailer.Queue(msc)
-		}(cid, msc)
+		}(key, msc)
 	}
 	return nil
 }
@@ -121,15 +149,20 @@ func (w *DefaultWorker) LaunchCampaign(c models.Campaign) {
 		return
 	}
 	models.LockMailLogs(ms, true)
-	// This is required since you cannot pass a slice of values
-	// that implements an interface as a slice of that interface.
-	mailEntries := []mailer.Mail{}
 	currentTime := time.Now().UTC()
 	campaignMailCtx, err := models.GetCampaignMailContext(c.Id, c.UserId)
 	if err != nil {
 		log.Error(err)
 		return
 	}
+	// Batch-fetch SMTPId mapping for all results in this campaign.
+	smtpIdMap, err := models.GetResultSMTPIdMap(c.Id)
+	if err != nil {
+		log.Warn(err)
+		smtpIdMap = map[string]int64{}
+	}
+	// Group mail entries by (campaignId, smtpId).
+	grouped := make(map[string][]mailer.Mail)
 	for _, m := range ms {
 		// Only send the emails scheduled to be sent for the past minute to
 		// respect the campaign scheduling options
@@ -142,9 +175,16 @@ func (w *DefaultWorker) LaunchCampaign(c models.Campaign) {
 			log.Error(err)
 			return
 		}
-		mailEntries = append(mailEntries, m)
+		smtpId := smtpIdMap[m.RId]
+		if smtpId == 0 {
+			smtpId = campaignMailCtx.SMTPId
+		}
+		key := fmt.Sprintf("%d:%d", c.Id, smtpId)
+		grouped[key] = append(grouped[key], m)
 	}
-	w.mailer.Queue(mailEntries)
+	for _, mailEntries := range grouped {
+		w.mailer.Queue(mailEntries)
+	}
 }
 
 // SendTestEmail sends a test email

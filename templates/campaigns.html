@@ -88,13 +88,9 @@
                     <label for="name">名称：</label>
                     <input type="text" class="form-control" id="name" placeholder="任务名称" autofocus>
                     <label class="control-label" for="template">邮件模板：</label>
-                    <select class="form-control" placeholder="Template Name" id="template" />
-                    <option></option>
-                    </select>
+                    <select class="form-control" placeholder="选择邮件模板" id="template"></select>
                     <label class="control-label" for="page">落地页面：</label>
-                    <select class="form-control" placeholder="Landing Page" id="page" />
-                    <option></option>
-                    </select>
+                    <select class="form-control" placeholder="选择落地页面" id="page"></select>
                     <label class="control-label" for="url">URL：
                         <i class="fa fa-question-circle" data-toggle="tooltip" data-placement="right" title="Gophish 监听器地址（目标必须可访问！）"></i>
                     </label>
@@ -112,15 +108,11 @@
                         </div>
                     </div>
                     <label class="control-label" for="profile">发件箱配置：</label>
-                    <div class="input-group">
-                        <select class="form-control" placeholder="Sending Profile" id="profile" />
-                        <option></option>
-                        </select>
-                        <span class="input-group-btn">
-                            <button type="button" data-toggle="modal" data-backdrop="static" data-target="#sendTestEmailModal"
-                                class="btn btn-primary button">
-                                <i class="fa fa-envelope"></i> 发送测试邮件</button>
-                        </span>
+                    <select class="form-control" placeholder="选择发件箱配置" id="profile" multiple="multiple"></select>
+                    <div style="margin-top:5px;">
+                        <button type="button" data-toggle="modal" data-backdrop="static" data-target="#sendTestEmailModal"
+                            class="btn btn-primary button">
+                            <i class="fa fa-envelope"></i> 发送测试邮件</button>
                     </div>
                     <label class="control-label" for="users">目标组：</label>
                     <select class="form-control" id="users" multiple="multiple"></select>

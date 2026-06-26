@@ -131,7 +131,8 @@ func (m *MailLog) Success() error {
 	return err
 }
 
-// GetDialer returns a dialer based on the maillog campaign's SMTP configuration
+// GetDialer returns a dialer based on the SMTP assigned to this maillog's
+// result.  Falls back to the campaign's primary SMTP for legacy data.
 func (m *MailLog) GetDialer() (mailer.Dialer, error) {
 	c := m.cachedCampaign
 	if c == nil {
@@ -141,7 +142,11 @@ func (m *MailLog) GetDialer() (mailer.Dialer, error) {
 		}
 		c = &campaign
 	}
-	return c.SMTP.GetDialer()
+	smtp, err := m.getAssignedSMTP(c)
+	if err != nil {
+		return nil, err
+	}
+	return smtp.GetDialer()
 }
 
 // CacheCampaign allows bulk-mail workers to cache the otherwise expensive
@@ -155,14 +160,80 @@ func (m *MailLog) CacheCampaign(campaign *Campaign) error {
 }
 
 func (m *MailLog) GetSmtpFrom() (string, error) {
-	c, err := GetCampaign(m.CampaignId, m.UserId)
+	c := m.cachedCampaign
+	if c == nil {
+		campaign, err := GetCampaignMailContext(m.CampaignId, m.UserId)
+		if err != nil {
+			return "", err
+		}
+		c = &campaign
+	}
+	smtp, err := m.getAssignedSMTP(c)
 	if err != nil {
 		return "", err
 	}
-
-	f, err := mail.ParseAddress(c.SMTP.FromAddress)
-	return f.Address, err
+	f, err := mail.ParseAddress(smtp.FromAddress)
+	if err != nil {
+		return "", err
+	}
+	return f.Address, nil
 }
+
+// getAssignedSMTP returns the SMTP record that was assigned to this
+// maillog's recipient during campaign creation (stored in Result.SMTPId).
+// If the result has no SMTPId (legacy data), it falls back to the
+// campaign's primary SMTP.
+func (m *MailLog) getAssignedSMTP(c *Campaign) (SMTP, error) {
+	r, err := GetResult(m.RId)
+	if err != nil {
+		return c.SMTP, err
+	}
+	if r.SMTPId != 0 {
+		for _, s := range c.SMTPs {
+			if s.Id == r.SMTPId {
+				return s, nil
+			}
+		}
+		// SMTPId set but not found in cached SMTPs — fetch directly
+		s := SMTP{}
+		dbErr := db.Where("id=?", r.SMTPId).Find(&s).Error
+		if dbErr == nil {
+			db.Where("smtp_id=?", s.Id).Find(&s.Headers)
+			return s, nil
+		}
+	}
+	// Legacy fallback: single SMTP on the campaign
+	return c.SMTP, nil
+}
+
+// extractEnvelopeSenderName parses the EnvelopeSender field and returns
+// only the display-name portion.  It handles three formats:
+//
+//	""                  → ""
+//	"Alice"             → "Alice"
+//	"Alice <a@b.com>"   → "Alice"
+func extractEnvelopeSenderName(es string) string {
+	if es == "" {
+		return ""
+	}
+	f, err := mail.ParseAddress(es)
+	if err != nil {
+		// Not a valid address — treat the whole string as a plain name.
+		return es
+	}
+	return f.Name
+}
+
+// mailContextWrapper is a thin wrapper around Campaign that overrides
+// getFromAddress() so that NewPhishingTemplateContext picks up the
+// correct From address for the SMTP assigned to this specific recipient.
+type mailContextWrapper struct {
+	*Campaign
+	fromAddress string
+}
+
+func (w *mailContextWrapper) getFromAddress() string { return w.fromAddress }
+func (w *mailContextWrapper) getBaseURL() string     { return w.Campaign.getBaseURL() }
 
 // Generate fills in the details of a gomail.Message instance with
 // the correct headers and body from the campaign and recipient listed in
@@ -182,16 +253,32 @@ func (m *MailLog) Generate(msg *gomail.Message) error {
 		c = &campaign
 	}
 
-	f, err := mail.ParseAddress(c.Template.EnvelopeSender)
+	// Determine the SMTP assigned to this specific recipient.
+	smtp, err := m.getAssignedSMTP(c)
 	if err != nil {
-		f, err = mail.ParseAddress(c.SMTP.FromAddress)
-		if err != nil {
-			return err
-		}
+		return err
 	}
-	msg.SetAddressHeader("From", f.Address, f.Name)
 
-	ptx, err := NewPhishingTemplateContext(c, r.BaseRecipient, r.RId)
+	// Build the From header.
+	//   - Email address: always from the assigned SMTP's FromAddress.
+	//   - Display name:  from Template.EnvelopeSender (plain name or
+	//     "Name <addr>" format).  Falls back to SMTP FromAddress if
+	//     EnvelopeSender is empty.
+	fromName := extractEnvelopeSenderName(c.Template.EnvelopeSender)
+	fromAddr, err := mail.ParseAddress(smtp.FromAddress)
+	if err != nil {
+		return err
+	}
+	if fromName == "" {
+		fromName = fromAddr.Name
+	}
+	msg.SetAddressHeader("From", fromAddr.Address, fromName)
+
+	// Build a template context wrapper so that {{.From}} in templates
+	// resolves to the assigned SMTP's FromAddress rather than the
+	// campaign-level (possibly stale) one.
+	wrapper := &mailContextWrapper{Campaign: c, fromAddress: smtp.FromAddress}
+	ptx, err := NewPhishingTemplateContext(wrapper, r.BaseRecipient, r.RId)
 	if err != nil {
 		return err
 	}
@@ -209,8 +296,8 @@ func (m *MailLog) Generate(msg *gomail.Message) error {
 	}
 	msg.SetHeader("Message-Id", messageID)
 
-	// Parse the customHeader templates
-	for _, header := range c.SMTP.Headers {
+	// Parse the customHeader templates from the ASSIGNED smtp
+	for _, header := range smtp.Headers {
 		key, err := ExecuteTemplate(header.Key, ptx)
 		if err != nil {
 			log.Warn(err)
@@ -279,6 +366,27 @@ func GetMailLogsByCampaign(cid int64) ([]*MailLog, error) {
 	ms := []*MailLog{}
 	err := db.Where("campaign_id = ?", cid).Find(&ms).Error
 	return ms, err
+}
+
+// GetResultSMTPIdMap returns a map from RId to SMTPId for all results in the
+// given campaign.  This is used by the worker to group maillogs by their
+// assigned SMTP without N+1 queries.
+func GetResultSMTPIdMap(campaignId int64) (map[string]int64, error) {
+	type ridSMTP struct {
+		RId    string
+		SMTPId int64
+	}
+	var rows []ridSMTP
+	err := db.Table("results").Where("campaign_id = ?", campaignId).
+		Select("r_id, smtp_id").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]int64, len(rows))
+	for _, row := range rows {
+		m[row.RId] = row.SMTPId
+	}
+	return m, nil
 }
 
 // LockMailLogs locks or unlocks a slice of maillogs for processing.

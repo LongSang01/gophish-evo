@@ -46,9 +46,9 @@ function launch() {
                     page: {
                         name: $("#page").select2("data")[0].text
                     },
-                    smtp: {
-                        name: $("#profile").select2("data")[0].text
-                    },
+                    smtps: $.map($("#profile").select2("data"), function (p) {
+                        return { name: p.text };
+                    }),
                     launch_date: moment($("#launch_date").val(), "MMMM Do YYYY, h:mm a").utc().format(),
                     send_by_date: send_by_date || null,
                     groups: groups,
@@ -236,11 +236,7 @@ function setupOptions() {
                 profile_select.select2({
                     placeholder: "选择发件箱配置",
                     data: profile_s2,
-                }).select2("val", profile_s2[0]);
-                if (profiles.length === 1) {
-                    profile_select.val(profile_s2[0].id)
-                    profile_select.trigger('change.select2')
-                }
+                });
             }
         });
 }
@@ -279,8 +275,20 @@ function copy(idx) {
                     placeholder: campaign.smtp.name
                 });
             } else {
-                $("#profile").val(campaign.smtp.id.toString());
-                $("#profile").trigger("change.select2")
+                // Support multi-SMTP: use smtps array if available,
+                // otherwise fall back to single smtp.
+                var smtpIds = [];
+                if (campaign.smtps && campaign.smtps.length > 0) {
+                    smtpIds = $.map(campaign.smtps, function (s) {
+                        return s.id ? s.id.toString() : null;
+                    });
+                } else if (campaign.smtp.id) {
+                    smtpIds = [campaign.smtp.id.toString()];
+                }
+                if (smtpIds.length > 0) {
+                    $("#profile").val(smtpIds);
+                    $("#profile").trigger("change.select2");
+                }
             }
             $("#url").val(campaign.url)
         })
