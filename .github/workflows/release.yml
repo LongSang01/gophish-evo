@@ -96,12 +96,6 @@ jobs:
             done
           done
 
-      - name: Generate SHA256 checksums
-        run: |
-          cd releases
-          sha256sum *.zip > SHA256SUMS
-          cat SHA256SUMS
-
       - name: Upload packaged artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -127,4 +121,3 @@ jobs:
           tag_name: ${{ github.event.release.tag_name }}
           files: |
             releases/*.zip
-            releases/SHA256SUMS
