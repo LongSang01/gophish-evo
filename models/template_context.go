@@ -68,12 +68,33 @@ func NewPhishingTemplateContext(ctx TemplateContext, r BaseRecipient, rid string
 	trackingURL.Path = path.Join(trackingURL.Path, "/track")
 	trackingURL.RawQuery = q.Encode()
 
+	// buildContext returns the template context with an empty QRCode field,
+	// used as a fallback when QR generation fails.
+	buildContext := func() PhishingTemplateContext {
+		return PhishingTemplateContext{
+			BaseRecipient: r,
+			BaseURL:       baseURL.String(),
+			URL:           phishURL.String(),
+			TrackingURL:   trackingURL.String(),
+			phishURL:      phishURL.String(),
+			Tracker:       "<img alt='' style='display: none' src='" + trackingURL.String() + "'/>",
+			From:          fn,
+			RId:           rid,
+			QRCode:        "",
+		}
+	}
+
 	// Generate QR code for phishing URL
 	qrCode, err := qrcode.New(phishURL.String(), qrcode.Medium)
 	if err != nil {
-		log.Fatal(err)
+		log.Warnf("QR code generation failed for %s: %v", phishURL.String(), err)
+		return buildContext(), nil
 	}
-	pngBytes, _ := qrCode.PNG(256)
+	pngBytes, err := qrCode.PNG(256)
+	if err != nil {
+		log.Warnf("QR code PNG encoding failed for %s: %v", phishURL.String(), err)
+		return buildContext(), nil
+	}
 	base64QRCode := base64.StdEncoding.EncodeToString(pngBytes)
 	imgSrc := fmt.Sprintf("data:image/png;base64,%s", base64QRCode)
 

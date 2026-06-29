@@ -230,7 +230,7 @@ func (c *Campaign) getDetails() error {
 	}
 
 	// Load multiple SMTPs from campaign_smtps join table
-	c.SMTPs, err = GetCampaignSMTPRecords(c.Id)
+	c.SMTPs, err = GetCampaignSMTPRecords(c.Id, c.UserId)
 	if err != nil {
 		log.Warn(err)
 	}
@@ -401,7 +401,7 @@ func GetCampaignMailContext(id int64, uid int64) (Campaign, error) {
 	}
 
 	// Load multiple SMTPs from campaign_smtps join table
-	c.SMTPs, err = GetCampaignSMTPRecords(c.Id)
+	c.SMTPs, err = GetCampaignSMTPRecords(c.Id, uid)
 	if err != nil {
 		log.Warn(err)
 	}
@@ -442,7 +442,7 @@ func GetCampaignResults(id int64, uid int64) (CampaignResults, error) {
 		return cr, err
 	}
 	// Load the SMTP sending profiles associated with this campaign
-	cr.SMTPs, err = GetCampaignSMTPRecords(cr.Id)
+	cr.SMTPs, err = GetCampaignSMTPRecords(cr.Id, uid)
 	if err != nil {
 		log.Warnf("%s: smtps not found for campaign", err)
 	}

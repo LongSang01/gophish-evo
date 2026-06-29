@@ -62,8 +62,10 @@ func PostCampaignSMTPs(tx *gorm.DB, campaignId int64, smtpIds []int64) error {
 }
 
 // GetCampaignSMTPRecords returns the full SMTP records (with Headers loaded)
-// associated with the given campaign, ordered by position.
-func GetCampaignSMTPRecords(campaignId int64) ([]SMTP, error) {
+// associated with the given campaign, ordered by position.  The uid parameter
+// ensures that only SMTP profiles owned by the requesting user are returned
+// (defence-in-depth — the SMTP was already validated at campaign creation time).
+func GetCampaignSMTPRecords(campaignId int64, uid int64) ([]SMTP, error) {
 	csmtps, err := GetCampaignSMTPs(campaignId)
 	if err != nil {
 		return nil, err
@@ -71,7 +73,7 @@ func GetCampaignSMTPRecords(campaignId int64) ([]SMTP, error) {
 	smtps := make([]SMTP, 0, len(csmtps))
 	for _, cs := range csmtps {
 		s := SMTP{}
-		err := db.Where("id=?", cs.SMTPId).Find(&s).Error
+		err := db.Where("id=? AND user_id=?", cs.SMTPId, uid).Find(&s).Error
 		if err != nil {
 			if err == gorm.ErrRecordNotFound {
 				continue

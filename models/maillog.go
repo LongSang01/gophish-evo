@@ -142,7 +142,11 @@ func (m *MailLog) GetDialer() (mailer.Dialer, error) {
 		}
 		c = &campaign
 	}
-	smtp, err := m.getAssignedSMTP(c)
+	r, err := GetResult(m.RId)
+	if err != nil {
+		return nil, err
+	}
+	smtp, err := m.getAssignedSMTP(c, r)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +172,11 @@ func (m *MailLog) GetSmtpFrom() (string, error) {
 		}
 		c = &campaign
 	}
-	smtp, err := m.getAssignedSMTP(c)
+	r, err := GetResult(m.RId)
+	if err != nil {
+		return "", err
+	}
+	smtp, err := m.getAssignedSMTP(c, r)
 	if err != nil {
 		return "", err
 	}
@@ -182,12 +190,9 @@ func (m *MailLog) GetSmtpFrom() (string, error) {
 // getAssignedSMTP returns the SMTP record that was assigned to this
 // maillog's recipient during campaign creation (stored in Result.SMTPId).
 // If the result has no SMTPId (legacy data), it falls back to the
-// campaign's primary SMTP.
-func (m *MailLog) getAssignedSMTP(c *Campaign) (SMTP, error) {
-	r, err := GetResult(m.RId)
-	if err != nil {
-		return c.SMTP, err
-	}
+// campaign's primary SMTP.  The caller passes the already-fetched Result
+// so we avoid a redundant DB round-trip.
+func (m *MailLog) getAssignedSMTP(c *Campaign, r Result) (SMTP, error) {
 	if r.SMTPId != 0 {
 		for _, s := range c.SMTPs {
 			if s.Id == r.SMTPId {
@@ -196,7 +201,7 @@ func (m *MailLog) getAssignedSMTP(c *Campaign) (SMTP, error) {
 		}
 		// SMTPId set but not found in cached SMTPs — fetch directly
 		s := SMTP{}
-		dbErr := db.Where("id=?", r.SMTPId).Find(&s).Error
+		dbErr := db.Where("id=? AND user_id=?", r.SMTPId, c.UserId).Find(&s).Error
 		if dbErr == nil {
 			db.Where("smtp_id=?", s.Id).Find(&s.Headers)
 			return s, nil
@@ -254,7 +259,7 @@ func (m *MailLog) Generate(msg *gomail.Message) error {
 	}
 
 	// Determine the SMTP assigned to this specific recipient.
-	smtp, err := m.getAssignedSMTP(c)
+	smtp, err := m.getAssignedSMTP(c, r)
 	if err != nil {
 		return err
 	}
