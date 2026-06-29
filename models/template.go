@@ -61,8 +61,8 @@ func GetTemplates(uid int64) ([]Template, error) {
 		return ts, err
 	}
 	for i := range ts {
-		// Get Attachments
-		err = db.Where("template_id=?", ts[i].Id).Find(&ts[i].Attachments).Error
+		// Get Attachments (exclude content column for performance - content is only needed when editing a single template)
+		err = db.Select("id, template_id, type, name").Where("template_id=?", ts[i].Id).Find(&ts[i].Attachments).Error
 		if err == nil && len(ts[i].Attachments) == 0 {
 			ts[i].Attachments = make([]Attachment, 0)
 		}
