@@ -7,9 +7,10 @@ import (
 
 // CampaignSMTP is a join table that maps a campaign to multiple sending
 // profiles (SMTP). The Position field records the order in which profiles
-// were selected by the user and is used for round-robin assignment:
+// were selected by the user and is used for interval-based even distribution:
 //
-//	profile_index = recipient_index % len(profiles)
+//	base = total / numProfiles, remainder = total % numProfiles
+//	first `remainder` profiles each get (base+1), the rest get `base`.
 //
 // This table is intentionally kept separate from the campaigns table so
 // that the original single-SMTPId column can remain for backward

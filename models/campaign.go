@@ -489,10 +489,7 @@ func PostCampaign(c *Campaign, uid int64) error {
 	if c.LaunchDate.Before(c.CreatedDate) || c.LaunchDate.Equal(c.CreatedDate) {
 		c.Status = CampaignInProgress
 	}
-	// Check to make sure all the groups already exist
-	// Also, later we'll need to know the total number of recipients (counting
-	// duplicates is ok for now), so we'll do that here to save a loop.
-	totalRecipients := 0
+	// Check to make sure all the groups already exist.
 	for i, g := range c.Groups {
 		c.Groups[i], err = GetGroupByName(g.Name, uid)
 		if err == gorm.ErrRecordNotFound {
@@ -504,7 +501,6 @@ func PostCampaign(c *Campaign, uid int64) error {
 			log.Error(err)
 			return err
 		}
-		totalRecipients += len(c.Groups[i].Targets)
 	}
 	// Check to make sure the template exists
 	t, err := GetTemplateByName(c.Template.Name, uid)
@@ -591,79 +587,93 @@ func PostCampaign(c *Campaign, uid int64) error {
 		log.Error(err)
 	}
 	// Insert all the results
-	// Assignment order: recipients are numbered 0, 1, 2, ... in the order
-	// they appear across groups (group order = user-defined, within-group
-	// order = import order).  Each recipient is assigned to the SMTP at
-	// position  recipientIndex % len(resolvedSMTPs)  (round-robin).
-	resultMap := make(map[string]bool)
-	recipientIndex := 0
-	tx := db.Begin()
+	// Step 1: merge all group targets and deduplicate, preserving order.
+	var uniqueTargets []Target
+	seen := make(map[string]bool)
 	for _, g := range c.Groups {
-		// Insert a result for each target in the group
 		for _, t := range g.Targets {
-			// Remove duplicate results - we should only
-			// send emails to unique email addresses.
-			if _, ok := resultMap[t.Email]; ok {
+			if seen[t.Email] {
 				continue
 			}
-			resultMap[t.Email] = true
-			sendDate := c.generateSendDate(recipientIndex, totalRecipients)
-			assignedSMTP := resolvedSMTPs[recipientIndex%len(resolvedSMTPs)]
-			r := &Result{
-				BaseRecipient: BaseRecipient{
-					Email:    t.Email,
-					Position: t.Position,
-					FullName: t.FullName,
-				},
-				SMTPId:       assignedSMTP.Id,
-				Status:       StatusScheduled,
-				CampaignId:   c.Id,
-				UserId:       c.UserId,
-				SendDate:     sendDate,
-				Reported:     false,
-				ModifiedDate: c.CreatedDate,
-			}
-			err = r.GenerateId(tx)
-			if err != nil {
-				log.Error(err)
-				tx.Rollback()
-				return err
-			}
-			processing := false
-			if r.SendDate.Before(c.CreatedDate) || r.SendDate.Equal(c.CreatedDate) {
-				r.Status = StatusSending
-				processing = true
-			}
-			err = tx.Save(r).Error
-			if err != nil {
-				log.WithFields(logrus.Fields{
-					"email": t.Email,
-				}).Errorf("error creating result: %v", err)
-				tx.Rollback()
-				return err
-			}
-			c.Results = append(c.Results, *r)
+			seen[t.Email] = true
+			uniqueTargets = append(uniqueTargets, t)
+		}
+	}
+
+	realTotal := len(uniqueTargets)
+	numSMTPs := len(resolvedSMTPs)
+	basePerSMTP := realTotal / numSMTPs
+	remainder := realTotal % numSMTPs
+
+	// Step 2: insert results with interval-based even SMTP distribution.
+	// First `remainder` profiles each get (basePerSMTP+1) recipients,
+	// the remaining profiles each get basePerSMTP recipients.
+	tx := db.Begin()
+	for recipientIndex, t := range uniqueTargets {
+		sendDate := c.generateSendDate(recipientIndex, realTotal)
+		var smtpIndex int
+		if basePerSMTP == 0 {
+			// Fewer recipients than SMTPs, fall back to round-robin
+			smtpIndex = recipientIndex % numSMTPs
+		} else if recipientIndex < remainder*(basePerSMTP+1) {
+			smtpIndex = recipientIndex / (basePerSMTP + 1)
+		} else {
+			smtpIndex = remainder + (recipientIndex-remainder*(basePerSMTP+1))/basePerSMTP
+		}
+		assignedSMTP := resolvedSMTPs[smtpIndex]
+		r := &Result{
+			BaseRecipient: BaseRecipient{
+				Email:    t.Email,
+				Position: t.Position,
+				FullName: t.FullName,
+			},
+			SMTPId:       assignedSMTP.Id,
+			Status:       StatusScheduled,
+			CampaignId:   c.Id,
+			UserId:       c.UserId,
+			SendDate:     sendDate,
+			Reported:     false,
+			ModifiedDate: c.CreatedDate,
+		}
+		err = r.GenerateId(tx)
+		if err != nil {
+			log.Error(err)
+			tx.Rollback()
+			return err
+		}
+		processing := false
+		if r.SendDate.Before(c.CreatedDate) || r.SendDate.Equal(c.CreatedDate) {
+			r.Status = StatusSending
+			processing = true
+		}
+		err = tx.Save(r).Error
+		if err != nil {
 			log.WithFields(logrus.Fields{
-				"email":     r.Email,
-				"send_date": sendDate,
-				"smtp_id":   assignedSMTP.Id,
-			}).Debug("creating maillog")
-			m := &MailLog{
-				UserId:     c.UserId,
-				CampaignId: c.Id,
-				RId:        r.RId,
-				SendDate:   sendDate,
-				Processing: processing,
-			}
-			err = tx.Save(m).Error
-			if err != nil {
-				log.WithFields(logrus.Fields{
-					"email": t.Email,
-				}).Errorf("error creating maillog entry: %v", err)
-				tx.Rollback()
-				return err
-			}
-			recipientIndex++
+				"email": t.Email,
+			}).Errorf("error creating result: %v", err)
+			tx.Rollback()
+			return err
+		}
+		c.Results = append(c.Results, *r)
+		log.WithFields(logrus.Fields{
+			"email":     r.Email,
+			"send_date": sendDate,
+			"smtp_id":   assignedSMTP.Id,
+		}).Debug("creating maillog")
+		m := &MailLog{
+			UserId:     c.UserId,
+			CampaignId: c.Id,
+			RId:        r.RId,
+			SendDate:   sendDate,
+			Processing: processing,
+		}
+		err = tx.Save(m).Error
+		if err != nil {
+			log.WithFields(logrus.Fields{
+				"email": t.Email,
+			}).Errorf("error creating maillog entry: %v", err)
+			tx.Rollback()
+			return err
 		}
 	}
 	return tx.Commit().Error
