@@ -1,0 +1,1 @@
+import{d as t}from"./index-JwTdET3b.js";function u(){return t.get({url:"/pages/"})}function n(e){return t.post({url:"/pages/",data:e})}function s(e,r){return t.put({url:`/pages/${e}`,data:{...r,id:e}})}function p(e){return t.delete({url:`/pages/${e}`})}function o(e){return t.post({url:"/import/site",data:e})}export{n as c,p as d,u as g,o as i,s as u};

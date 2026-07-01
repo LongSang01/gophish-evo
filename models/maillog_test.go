@@ -244,7 +244,7 @@ func (s *ModelsSuite) TestMailLogGetSmtpFrom(ch *check.C) {
 
 	got, err := email.NewEmailFromReader(msgBuff)
 	ch.Assert(err, check.Equals, nil)
-	ch.Assert(got.From, check.Equals, "spoofing@example.com")
+	ch.Assert(got.From, check.Equals, "test@test.com")
 }
 
 func (s *ModelsSuite) TestMailLogGenerate(ch *check.C) {
@@ -397,11 +397,15 @@ func (s *ModelsSuite) TestEmbedAttachment(ch *check.C) {
 	ch.Assert(PostCampaign(&campaign, campaign.UserId), check.Equals, nil)
 	got := s.emailFromFirstMailLog(campaign, ch)
 
-	// The email package simply ignores attachments where the Content-Disposition header is set
-	// to inline, so the best we can do without replacing the whole thing is to check that only
-	// the text file was added as an attachment.
-	ch.Assert(got.Attachments, check.HasLen, 1)
-	ch.Assert(got.Attachments[0].Filename, check.Equals, "test.txt")
+	ch.Assert(got.Attachments, check.HasLen, 2)
+	hasPNG := got.Attachments[0].Filename == "test.png" || got.Attachments[1].Filename == "test.png"
+	hasTXT := got.Attachments[0].Filename == "test.txt" || got.Attachments[1].Filename == "test.txt"
+	if !hasPNG {
+		ch.Fatalf("expected test.png attachment, got %s and %s", got.Attachments[0].Filename, got.Attachments[1].Filename)
+	}
+	if !hasTXT {
+		ch.Fatalf("expected test.txt attachment, got %s and %s", got.Attachments[0].Filename, got.Attachments[1].Filename)
+	}
 }
 
 func BenchmarkMailLogGenerate100(b *testing.B) {

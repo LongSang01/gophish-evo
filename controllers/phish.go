@@ -19,7 +19,6 @@ import (
 	"github.com/gophish/gophish/util"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	"github.com/jordan-wright/unindexed"
 )
 
 // ErrInvalidRequest is thrown when a request with an invalid structure is
@@ -105,11 +104,12 @@ func (ps *PhishingServer) Shutdown() error {
 	return ps.server.Shutdown(ctx)
 }
 
+// trackingPixel is a 1x1 transparent GIF used for email open tracking.
+var trackingPixel = []byte("\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x00\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b")
+
 // CreatePhishingRouter creates the router that handles phishing connections.
 func (ps *PhishingServer) registerRoutes() {
 	router := mux.NewRouter()
-	fileServer := http.FileServer(unindexed.Dir("./static/endpoint/"))
-	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", fileServer))
 	router.HandleFunc("/track", ps.TrackHandler)
 	router.HandleFunc("/robots.txt", ps.RobotsHandler)
 	router.HandleFunc("/{path:.*}/track", ps.TrackHandler)
@@ -143,7 +143,7 @@ func (ps *PhishingServer) TrackHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Check for a preview
 	if _, ok := ctx.Get(r, "result").(models.EmailRequest); ok {
-		http.ServeFile(w, r, "static/images/pixel.png")
+		w.Write(trackingPixel)
 		return
 	}
 	rs := ctx.Get(r, "result").(models.Result)
@@ -160,7 +160,7 @@ func (ps *PhishingServer) TrackHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Error(err)
 	}
-	http.ServeFile(w, r, "static/images/pixel.png")
+	w.Write(trackingPixel)
 }
 
 // ReportHandler tracks emails as they are reported, updating the status for the given Result

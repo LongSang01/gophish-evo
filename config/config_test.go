@@ -15,7 +15,9 @@ var validConfig = []byte(`{
 		"listen_url": "127.0.0.1:3333",
 		"use_tls": true,
 		"cert_path": "gophish_admin.crt",
-		"key_path": "gophish_admin.key"
+		"key_path": "gophish_admin.key",
+		"jwt_secret": "",
+		"trusted_origins": []
 	},
 	"phish_server": {
 		"listen_url": "0.0.0.0:8080",
@@ -64,7 +66,6 @@ func TestLoadConfig(t *testing.T) {
 	}
 	expectedConfig.MigrationsPath = expectedConfig.MigrationsPath + expectedConfig.DBName
 	expectedConfig.TestFlag = false
-	expectedConfig.AdminConf.CSRFKey = ""
 	expectedConfig.Logging = &log.Config{}
 	if !reflect.DeepEqual(expectedConfig, conf) {
 		t.Fatalf("invalid config received. expected %#v got %#v", expectedConfig, conf)

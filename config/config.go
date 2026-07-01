@@ -13,7 +13,7 @@ type AdminServer struct {
 	UseTLS               bool     `json:"use_tls"`
 	CertPath             string   `json:"cert_path"`
 	KeyPath              string   `json:"key_path"`
-	CSRFKey              string   `json:"csrf_key"`
+	JWTSecret            string   `json:"jwt_secret"`
 	AllowedInternalHosts []string `json:"allowed_internal_hosts"`
 	TrustedOrigins       []string `json:"trusted_origins"`
 }

@@ -36,6 +36,7 @@ type Result struct {
 	SendDate     time.Time `json:"send_date"`
 	Reported     bool      `json:"reported" sql:"not null"`
 	ModifiedDate time.Time `json:"modified_date"`
+	SMTPFromAddress string `json:"smtp_from_address,omitempty" gorm:"-"`
 	BaseRecipient
 }
 
@@ -152,7 +153,7 @@ func (r *Result) HandleEmailReport(details EventDetails) error {
 // the database given an IP address
 func (r *Result) UpdateGeo(addr string) error {
 	// Open a connection to the maxmind db
-	mmdb, err := maxminddb.Open("static/db/geolite2-city.mmdb")
+	mmdb, err := maxminddb.Open("db/geolite2-city.mmdb")
 	if err != nil {
 		log.Fatal(err)
 	}

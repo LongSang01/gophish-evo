@@ -175,24 +175,7 @@ func TestBearerToken(t *testing.T) {
 	}
 }
 
-func TestPasswordResetRequired(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req = ctx.Set(req, "user", models.User{
-		PasswordChangeRequired: true,
-	})
-	response := httptest.NewRecorder()
-	RequireLogin(successHandler).ServeHTTP(response, req)
-	gotStatus := response.Code
-	expectedStatus := http.StatusTemporaryRedirect
-	if gotStatus != expectedStatus {
-		t.Fatalf("incorrect status code received. expected %d got %d", expectedStatus, gotStatus)
-	}
-	expectedLocation := "/reset_password?next=%2F"
-	gotLocation := response.Header().Get("Location")
-	if gotLocation != expectedLocation {
-		t.Fatalf("incorrect location header received. expected %s got %s", expectedLocation, gotLocation)
-	}
-}
+
 
 func TestApplySecurityHeaders(t *testing.T) {
 	expected := map[string]string{

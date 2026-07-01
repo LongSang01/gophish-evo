@@ -6,9 +6,10 @@
 
 ### 主要更新
 
-- **中文本地化**：界面大量中文化
+- **中文本地化**：改用基于[Vben Admin](https://github.com/vbenjs/vue-vben-admin)修改的全新前端页面
 - **多发件箱支持**：支持调用多个发件箱在单个任务内均等发送
 - **二维码功能**：内置二维码生成，补丁来自[gophish-z](https://github.com/hikeny666/gophish-z)
+- **JWT Token**：修改原本的`Cookie`认证为`JWT Token`认证
 
 ### 修改项
 
@@ -30,8 +31,9 @@ go build
 - 前端代码
 
 ```bash
+cd web
 npm install
-npx gulp
+npm run build
 ```
 
 ### 文档
@@ -43,6 +45,8 @@ npx gulp
 https://github.com/gophish/gophish
 
 https://github.com/hikeny666/gophish-z
+
+https://github.com/vbenjs/vue-vben-admin
 
 ### 免责声明
 

@@ -43,6 +43,7 @@ const (
 	CampaignInProgress string = "In progress"
 	CampaignQueued     string = "Queued"
 	CampaignCreated    string = "Created"
+	CampaignScheduled  string = "Scheduled"
 	CampaignEmailsSent string = "Emails Sent"
 	CampaignComplete   string = "Completed"
 	EventSent          string = "Email Sent"

@@ -34,12 +34,12 @@ import (
 
 	"gopkg.in/alecthomas/kingpin.v2"
 
+	"github.com/gophish/gophish/auth"
 	"github.com/gophish/gophish/config"
 	"github.com/gophish/gophish/controllers"
 	"github.com/gophish/gophish/dialer"
 	"github.com/gophish/gophish/imap"
 	log "github.com/gophish/gophish/logger"
-	"github.com/gophish/gophish/middleware"
 	"github.com/gophish/gophish/models"
 	"github.com/gophish/gophish/webhook"
 )
@@ -80,6 +80,14 @@ func main() {
 		log.Warnf("No contact address has been configured.")
 		log.Warnf("Please consider adding a contact_address entry in your config.json")
 	}
+	// Initialize JWT secret from config to ensure tokens persist
+	// across server restarts and multi-server deployments.
+	if conf.AdminConf.JWTSecret == "" {
+		log.Warnf("No jwt_secret configured. A random key will be used, which invalidates")
+		log.Warnf("all existing tokens on server restart. Set jwt_secret in config.json")
+		log.Warnf("to a secure random value to avoid this.")
+	}
+	auth.InitJWTSecret(conf.AdminConf.JWTSecret)
 	config.Version = string(version)
 
 	// Configure our various upstream clients to make sure that we restrict
@@ -115,7 +123,6 @@ func main() {
 	}
 	adminConfig := conf.AdminConf
 	adminServer := controllers.NewAdminServer(adminConfig, adminOptions...)
-	middleware.Store.Options.Secure = adminConfig.UseTLS
 
 	phishConfig := conf.PhishConf
 	phishServer := controllers.NewPhishingServer(phishConfig)

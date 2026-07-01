@@ -30,15 +30,20 @@ CREATE TABLE IF NOT EXISTS "results_temp" (
     "r_id" varchar(255),
     "email" varchar(255),
     "full_name" varchar(255),
+    "position" varchar(255),
     "status" varchar(255) NOT NULL,
     "ip" varchar(255),
     "latitude" real,
-    "longitude" real
+    "longitude" real,
+    "send_date" datetime,
+    "reported" boolean default 0,
+    "modified_date" datetime,
+    "smtp_id" bigint DEFAULT 0
 );
 
 -- Copy data from results to results_temp
-INSERT INTO "results_temp" ("id", "campaign_id", "user_id", "r_id", "email", "full_name", "status", "ip", "latitude", "longitude")
-SELECT "id", "campaign_id", "user_id", "r_id", "email", TRIM(COALESCE("first_name", '') || ' ' || COALESCE("last_name", '')), "status", "ip", "latitude", "longitude"
+INSERT INTO "results_temp" ("id", "campaign_id", "user_id", "r_id", "email", "full_name", "position", "status", "ip", "latitude", "longitude", "send_date", "reported", "modified_date", "smtp_id")
+SELECT "id", "campaign_id", "user_id", "r_id", "email", TRIM(COALESCE("first_name", '') || ' ' || COALESCE("last_name", '')), "position", "status", "ip", "latitude", "longitude", "send_date", "reported", "modified_date", COALESCE("smtp_id", 0)
 FROM "results";
 
 -- Drop old table and rename new one
@@ -101,18 +106,23 @@ CREATE TABLE IF NOT EXISTS "results_temp" (
     "email" varchar(255),
     "first_name" varchar(255),
     "last_name" varchar(255),
+    "position" varchar(255),
     "status" varchar(255) NOT NULL,
     "ip" varchar(255),
     "latitude" real,
-    "longitude" real
+    "longitude" real,
+    "send_date" datetime,
+    "reported" boolean default 0,
+    "modified_date" datetime,
+    "smtp_id" bigint DEFAULT 0
 );
 
 -- Copy data from results to results_temp
-INSERT INTO "results_temp" ("id", "campaign_id", "user_id", "r_id", "email", "first_name", "last_name", "status", "ip", "latitude", "longitude")
+INSERT INTO "results_temp" ("id", "campaign_id", "user_id", "r_id", "email", "first_name", "last_name", "position", "status", "ip", "latitude", "longitude", "send_date", "reported", "modified_date", "smtp_id")
 SELECT "id", "campaign_id", "user_id", "r_id", "email",
     CASE WHEN INSTR("full_name", ' ') > 0 THEN SUBSTR("full_name", 1, INSTR("full_name", ' ') - 1) ELSE "full_name" END,
     CASE WHEN INSTR("full_name", ' ') > 0 THEN SUBSTR("full_name", INSTR("full_name", ' ') + 1) ELSE '' END,
-    "status", "ip", "latitude", "longitude"
+    "position", "status", "ip", "latitude", "longitude", "send_date", "reported", "modified_date", COALESCE("smtp_id", 0)
 FROM "results";
 
 -- Drop old table and rename new one

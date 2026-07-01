@@ -13,25 +13,26 @@ import (
 
 // Campaign is a struct representing a created campaign
 type Campaign struct {
-	Id            int64     `json:"id"`
-	UserId        int64     `json:"-"`
-	Name          string    `json:"name" sql:"not null"`
-	CreatedDate   time.Time `json:"created_date"`
-	LaunchDate    time.Time `json:"launch_date"`
-	SendByDate    time.Time `json:"send_by_date"`
-	CompletedDate time.Time `json:"completed_date"`
-	TemplateId    int64     `json:"-"`
-	Template      Template  `json:"template"`
-	PageId        int64     `json:"-"`
-	Page          Page      `json:"page"`
-	Status        string    `json:"status"`
-	Results       []Result  `json:"results,omitempty"`
-	Groups        []Group   `json:"groups,omitempty"`
-	Events        []Event   `json:"timeline,omitempty"`
-	SMTPId        int64     `json:"-"`
-	SMTP          SMTP      `json:"smtp"`
-	SMTPs         []SMTP    `json:"smtps,omitempty" gorm:"-"`
-	URL           string    `json:"url"`
+	Id            int64         `json:"id"`
+	UserId        int64         `json:"-"`
+	Name          string        `json:"name" sql:"not null"`
+	CreatedDate   time.Time     `json:"created_date"`
+	LaunchDate    time.Time     `json:"launch_date"`
+	SendByDate    time.Time     `json:"send_by_date"`
+	CompletedDate time.Time     `json:"completed_date"`
+	TemplateId    int64         `json:"-"`
+	Template      Template      `json:"template"`
+	PageId        int64         `json:"-"`
+	Page          Page          `json:"page"`
+	Status        string        `json:"status"`
+	Results       []Result      `json:"results,omitempty"`
+	Groups        []Group       `json:"groups,omitempty"`
+	Events        []Event       `json:"timeline,omitempty"`
+	SMTPId        int64         `json:"-"`
+	SMTP          SMTP          `json:"smtp"`
+	SMTPs         []SMTP        `json:"smtps,omitempty" gorm:"-"`
+	URL           string        `json:"url"`
+	Stats         CampaignStats `json:"stats" gorm:"-"`
 }
 
 // CampaignResults is a struct representing the results from a campaign
@@ -193,7 +194,7 @@ func (c *Campaign) getDetails() error {
 		log.Warnf("%s: events not found for campaign", err)
 		return err
 	}
-	err = db.Table("templates").Where("id=?", c.TemplateId).Find(&c.Template).Error
+	err = db.Table("templates").Select("id, name, envelope_sender, subject, modified_date").Where("id=?", c.TemplateId).Find(&c.Template).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return err
@@ -201,12 +202,12 @@ func (c *Campaign) getDetails() error {
 		c.Template = Template{Name: "[Deleted]"}
 		log.Warnf("%s: template not found for campaign", err)
 	}
-	err = db.Where("template_id=?", c.Template.Id).Find(&c.Template.Attachments).Error
+	err = db.Select("id, template_id, type, name").Where("template_id=?", c.Template.Id).Find(&c.Template.Attachments).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		log.Warn(err)
 		return err
 	}
-	err = db.Table("pages").Where("id=?", c.PageId).Find(&c.Page).Error
+	err = db.Table("pages").Select("id, user_id, name, capture_credentials, capture_passwords, redirect_url, modified_date").Where("id=?", c.PageId).Find(&c.Page).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return err
@@ -234,6 +235,26 @@ func (c *Campaign) getDetails() error {
 	if err != nil {
 		log.Warn(err)
 	}
+
+	// Load groups associated with this campaign
+	err = db.Model(c).Related(&c.Groups, "Groups").Error
+	if err != nil {
+		log.Warnf("%s: groups not found for campaign", err)
+	}
+	// Load targets for each group
+	for i := range c.Groups {
+		err = db.Model(&c.Groups[i]).Related(&c.Groups[i].Targets).Error
+		if err != nil && err != gorm.ErrRecordNotFound {
+			log.Warnf("%s: targets not found for group %d", err, c.Groups[i].Id)
+		}
+	}
+
+	// Load campaign stats
+	c.Stats, err = getCampaignStats(c.Id)
+	if err != nil {
+		log.Warnf("%s: stats not found for campaign", err)
+	}
+
 	return nil
 }
 
@@ -445,6 +466,16 @@ func GetCampaignResults(id int64, uid int64) (CampaignResults, error) {
 	cr.SMTPs, err = GetCampaignSMTPRecords(cr.Id, uid)
 	if err != nil {
 		log.Warnf("%s: smtps not found for campaign", err)
+	}
+	// Populate smtp_from_address for each result
+	smtpMap := make(map[int64]string)
+	for _, s := range cr.SMTPs {
+		smtpMap[s.Id] = s.FromAddress
+	}
+	for i := range cr.Results {
+		if addr, ok := smtpMap[cr.Results[i].SMTPId]; ok {
+			cr.Results[i].SMTPFromAddress = addr
+		}
 	}
 	return cr, err
 }
@@ -738,6 +769,24 @@ func CompleteCampaign(id int64, uid int64) error {
 	c.Status = CampaignComplete
 	err = db.Model(&Campaign{}).Where("id=? and user_id=?", id, uid).
 		Select([]string{"completed_date", "status"}).UpdateColumns(&c).Error
+	if err != nil {
+		log.Error(err)
+	}
+	return err
+}
+
+// LaunchCampaign marks a scheduled/queued campaign as in_progress and sets its launch date to now.
+func LaunchCampaign(id int64, uid int64) error {
+	log.WithFields(logrus.Fields{
+		"campaign_id": id,
+	}).Info("Launching campaign")
+	now := time.Now().UTC()
+	err := db.Model(&Campaign{}).Where("id=? and user_id=?", id, uid).
+		Where("status IN (?)", []string{CampaignScheduled, CampaignQueued}).
+		Updates(map[string]interface{}{
+			"status":      CampaignInProgress,
+			"launch_date": now,
+		}).Error
 	if err != nil {
 		log.Error(err)
 	}

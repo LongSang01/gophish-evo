@@ -135,3 +135,31 @@ func (as *Server) CampaignComplete(w http.ResponseWriter, r *http.Request) {
 		JSONResponse(w, models.Response{Success: true, Message: "Campaign completed successfully!"}, http.StatusOK)
 	}
 }
+
+// CampaignLaunch launches a scheduled or queued campaign immediately.
+func (as *Server) CampaignLaunch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		return
+	}
+	vars := mux.Vars(r)
+	id, _ := strconv.ParseInt(vars["id"], 0, 64)
+	uid := ctx.Get(r, "user_id").(int64)
+	c, err := models.GetCampaign(id, uid)
+	if err != nil {
+		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+		return
+	}
+	if c.Status != models.CampaignScheduled && c.Status != models.CampaignQueued {
+		JSONResponse(w, models.Response{Success: false, Message: "Campaign is not in a launchable state"}, http.StatusBadRequest)
+		return
+	}
+	err = models.LaunchCampaign(id, uid)
+	if err != nil {
+		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+		return
+	}
+	// Launch via worker
+	go as.worker.LaunchCampaign(c)
+	JSONResponse(w, models.Response{Success: true, Message: "Campaign launched successfully!"}, http.StatusOK)
+}

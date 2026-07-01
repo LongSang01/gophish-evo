@@ -52,12 +52,8 @@ func openEmail(t *testing.T, ctx *testContext, rid string) {
 	if err != nil {
 		t.Fatalf("error reading response body from /track endpoint: %v", err)
 	}
-	expected, err := ioutil.ReadFile("static/images/pixel.png")
-	if err != nil {
-		t.Fatalf("error reading local transparent pixel: %v", err)
-	}
-	if !bytes.Equal(got, expected) {
-		t.Fatalf("unexpected tracking pixel data received. expected %#v got %#v", expected, got)
+	if !bytes.Equal(got, trackingPixel) {
+		t.Fatalf("unexpected tracking pixel data received. expected %#v got %#v", trackingPixel, got)
 	}
 }
 
