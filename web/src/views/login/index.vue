@@ -3,7 +3,7 @@
     <div class="login-content">
       <div class="login-header">
         <h1 class="login-title">Gophish-Evo</h1>
-        <p class="login-subtitle">钓鱼测试管理平台</p>
+        <p class="login-subtitle">网络钓鱼管理平台</p>
       </div>
       
       <a-form

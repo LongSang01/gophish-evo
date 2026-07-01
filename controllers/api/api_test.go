@@ -750,7 +750,7 @@ func TestModifySendingProfile(t *testing.T) {
 	tc := setupTest(t)
 	createTestData(t)
 
-	body := `{"id":1,"name":"Modified SMTP","host":"modified.com:25","from_address":"mod@example.com","interface_type":"SMTP"}`
+	body := `{"id":1,"name":"Modified SMTP","host":"modified.com:25","from_address":"mod@example.com"}`
 	url := "/api/smtp/1"
 	r := httptest.NewRequest(http.MethodPut, url, bytes.NewBufferString(body))
 	r.Header.Set("Content-Type", "application/json")

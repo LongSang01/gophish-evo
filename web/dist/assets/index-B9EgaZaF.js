@@ -1,1 +1,0 @@
-import{d as e}from"./index-JwTdET3b.js";function s(){return e.get({url:"/smtp/"})}function n(t){return e.post({url:"/smtp/",data:t})}function l(t,r){return e.put({url:`/smtp/${t}`,data:{...r,id:t}})}function o(t){return e.delete({url:`/smtp/${t}`})}function a(t){return e.post({url:"/util/send_test_email",data:t})}export{n as c,o as d,s as g,a as s,l as u};

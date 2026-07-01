@@ -54,7 +54,7 @@
             :data-source="formData.targets"
             :pagination="false"
             size="small"
-            row-key="email"
+            row-key="uid"
           >
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'email'">
@@ -110,6 +110,8 @@ import {
   DeleteOutlined,
   DownloadOutlined,
 } from '@ant-design/icons-vue';
+
+let targetUid = 0;
 import { getGroups, createGroup, updateGroup, deleteGroup, importGroup } from '@/api/groups';
 import { formatDate } from '@/utils/format';
 
@@ -164,11 +166,16 @@ function showCreateModal() {
   modalVisible.value = true;
 }
 
+function assignUids(targets: any[]) {
+  targets.forEach(t => { t.uid = ++targetUid; });
+  return targets;
+}
+
 function showEditModal(group: any) {
   editingGroup.value = group;
   formData.value = {
     name: group.name,
-    targets: group.targets ? [...group.targets] : [],
+    targets: group.targets ? assignUids([...group.targets]) : [],
   };
   modalVisible.value = true;
 }
@@ -177,13 +184,14 @@ function handleDuplicate(group: any) {
   editingGroup.value = null;
   formData.value = {
     name: `${group.name} (副本)`,
-    targets: group.targets ? [...group.targets] : [],
+    targets: group.targets ? assignUids([...group.targets]) : [],
   };
   modalVisible.value = true;
 }
 
 function addTarget() {
   formData.value.targets.push({
+    uid: ++targetUid,
     email: '',
     full_name: '',
     position: '',
@@ -231,6 +239,7 @@ async function handleCsvUpload(file: File) {
     // Use backend API for robust CSV parsing
     const targets = await importGroup(0, file);
     if (Array.isArray(targets) && targets.length > 0) {
+      assignUids(targets);
       formData.value.targets.push(...targets);
       message.success(`已导入 ${targets.length} 个用户`);
     } else {
@@ -254,6 +263,7 @@ async function handleCsvUpload(file: File) {
           });
         }
       }
+      assignUids(newTargets);
       formData.value.targets.push(...newTargets);
       message.success(`已导入 ${newTargets.length} 个用户`);
     };

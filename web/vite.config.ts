@@ -27,10 +27,10 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       rollupOptions: {
         output: {
-          manualChunks: {
-            vendor: ['vue', 'vue-router', 'pinia'],
-            antd: ['ant-design-vue'],
-            echarts: ['echarts'],
+          manualChunks(id: string) {
+            if (id.includes('node_modules/vue') || id.includes('node_modules/vue-router') || id.includes('node_modules/pinia')) return 'vendor';
+            if (id.includes('node_modules/ant-design-vue')) return 'antd';
+            if (id.includes('node_modules/echarts')) return 'echarts';
           },
         },
       },

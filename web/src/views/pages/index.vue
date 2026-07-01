@@ -148,6 +148,7 @@ const formData = ref({
 const cmExtensions = [html(), oneDark];
 const showPreview = ref(false);
 const previewFrame = ref<HTMLIFrameElement | null>(null);
+void previewFrame;
 
 const importSiteVisible = ref(false);
 const importSiteUrl = ref('');

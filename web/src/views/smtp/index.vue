@@ -18,11 +18,6 @@
           <template v-if="column.key === 'host_display'">
             <code>{{ record.host }}</code>
           </template>
-          <template v-if="column.key === 'interface_type'">
-            <a-tag :color="(record.interface_type || 'SMTP') === 'SMTP' ? 'blue' : 'purple'">
-              {{ record.interface_type || 'SMTP' }}
-            </a-tag>
-          </template>
           <template v-if="column.key === 'modified_date'">
             {{ formatDate(record.modified_date) }}
           </template>
@@ -63,12 +58,6 @@
         <a-form-item label="配置名称" required>
           <a-input v-model:value="formData.name" placeholder="输入配置名称" />
         </a-form-item>
-        <a-form-item label="接口类型">
-          <a-select v-model:value="formData.interface_type">
-            <a-select-option value="SMTP">SMTP</a-select-option>
-            <a-select-option value="Sendmail">Sendmail</a-select-option>
-          </a-select>
-        </a-form-item>
         <a-form-item label="SMTP地址" required>
           <a-input v-model:value="formData.host" placeholder="smtp.example.com:587" />
         </a-form-item>
@@ -92,7 +81,7 @@
             :data-source="formData.headers"
             :pagination="false"
             size="small"
-            row-key="key"
+            row-key="uid"
           >
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'key'">
@@ -123,6 +112,8 @@
 import { ref, onMounted } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons-vue';
+
+let headerUid = 0;
 import { getSMTPProfiles, createSMTPProfile, updateSMTPProfile, deleteSMTPProfile, sendTestEmail } from '@/api/smtp';
 import { formatDate } from '@/utils/format';
 
@@ -140,7 +131,6 @@ const newHeaderValue = ref('');
 
 const formData = ref({
   name: '',
-  interface_type: 'SMTP',
   host: '',
   username: '',
   password: '',
@@ -157,7 +147,6 @@ const headerColumns = [
 
 const columns = [
   { title: '配置名称', dataIndex: 'name', key: 'name' },
-  { title: '接口类型', dataIndex: 'interface_type', key: 'interface_type' },
   { title: 'SMTP地址', key: 'host_display' },
   { title: '发件人', dataIndex: 'from_address', key: 'from_address' },
   { title: '修改时间', dataIndex: 'modified_date', key: 'modified_date' },
@@ -185,7 +174,6 @@ function showCreateModal() {
   editingProfile.value = null;
   formData.value = {
     name: '',
-    interface_type: 'SMTP',
     host: '',
     username: '',
     password: '',
@@ -196,17 +184,21 @@ function showCreateModal() {
   modalVisible.value = true;
 }
 
+function assignHeaderUids(headers: any[]) {
+  headers.forEach(h => { h.uid = ++headerUid; });
+  return headers;
+}
+
 function showEditModal(profile: any) {
   editingProfile.value = profile;
   formData.value = {
     name: profile.name,
-    interface_type: profile.interface_type || 'SMTP',
     host: profile.host,
     username: profile.username || '',
     password: profile.password || '',
     from_address: profile.from_address || '',
     ignore_cert_errors: profile.ignore_cert_errors || false,
-    headers: profile.headers ? profile.headers.map((h: any) => ({ ...h })) : [],
+    headers: profile.headers ? assignHeaderUids(profile.headers.map((h: any) => ({ ...h }))) : [],
   };
   modalVisible.value = true;
 }
@@ -215,13 +207,12 @@ function handleDuplicate(profile: any) {
   editingProfile.value = null;
   formData.value = {
     name: `${profile.name} - 副本`,
-    interface_type: profile.interface_type || 'SMTP',
     host: profile.host,
     username: profile.username || '',
     password: profile.password || '',
     from_address: profile.from_address || '',
     ignore_cert_errors: profile.ignore_cert_errors || false,
-    headers: profile.headers ? profile.headers.map((h: any) => ({ ...h })) : [],
+    headers: profile.headers ? assignHeaderUids(profile.headers.map((h: any) => ({ ...h }))) : [],
   };
   modalVisible.value = true;
 }
@@ -232,6 +223,7 @@ function addCustomHeader() {
     return;
   }
   formData.value.headers.push({
+    uid: ++headerUid,
     key: newHeaderKey.value,
     value: newHeaderValue.value,
   });

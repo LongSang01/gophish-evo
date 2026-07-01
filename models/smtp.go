@@ -34,7 +34,6 @@ func (d *Dialer) Dial() (mailer.Sender, error) {
 type SMTP struct {
 	Id               int64     `json:"id" gorm:"column:id; primary_key:yes"`
 	UserId           int64     `json:"-" gorm:"column:user_id"`
-	Interface        string    `json:"interface_type" gorm:"column:interface_type"`
 	Name             string    `json:"name"`
 	Host             string    `json:"host"`
 	Username         string    `json:"username,omitempty"`

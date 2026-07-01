@@ -98,7 +98,7 @@
             :data-source="formData.attachments"
             :pagination="false"
             size="small"
-            row-key="name"
+            row-key="uid"
           >
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'name'">
@@ -196,6 +196,8 @@
 import { ref, onMounted } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import { PlusOutlined, EyeOutlined, SendOutlined, ImportOutlined, UploadOutlined, DeleteOutlined } from '@ant-design/icons-vue';
+
+let attachmentUid = 0;
 import { Codemirror } from 'vue-codemirror';
 import { html } from '@codemirror/lang-html';
 import { oneDark } from '@codemirror/theme-one-dark';
@@ -242,6 +244,7 @@ const formData = ref({
 const cmExtensions = [html(), oneDark];
 const showPreview = ref(false);
 const previewFrame = ref<HTMLIFrameElement | null>(null);
+void previewFrame;
 
 function togglePreview() {
   showPreview.value = !showPreview.value;
@@ -295,6 +298,11 @@ function showCreateModal() {
   modalVisible.value = true;
 }
 
+function assignAttachmentUids(attachments: any[]) {
+  attachments.forEach(a => { a.uid = ++attachmentUid; });
+  return attachments;
+}
+
 function showEditModal(template: any) {
   editingTemplate.value = template;
   const hasTracker = template.html && (template.html.includes('{{.Tracker}}') || template.html.includes('{{.TrackingUrl}}'));
@@ -305,7 +313,7 @@ function showEditModal(template: any) {
     html: template.html || '',
     text: template.text || '',
     useTracker: hasTracker,
-    attachments: template.attachments ? template.attachments.map((a: any) => ({ ...a })) : [],
+    attachments: template.attachments ? assignAttachmentUids(template.attachments.map((a: any) => ({ ...a }))) : [],
   };
   editorKey.value = Date.now();
   modalVisible.value = true;
@@ -321,7 +329,7 @@ function handleDuplicate(template: any) {
     html: template.html || '',
     text: template.text || '',
     useTracker: hasTracker,
-    attachments: template.attachments ? template.attachments.map((a: any) => ({ ...a })) : [],
+    attachments: template.attachments ? assignAttachmentUids(template.attachments.map((a: any) => ({ ...a }))) : [],
   };
   editorKey.value = Date.now();
   modalVisible.value = true;
@@ -333,6 +341,7 @@ function handleAttachmentUpload(file: File) {
     const content = e.target.result.split(',')[1];
     const type = file.type || 'application/octet-stream';
     formData.value.attachments.push({
+      uid: ++attachmentUid,
       name: file.name,
       content,
       type,
