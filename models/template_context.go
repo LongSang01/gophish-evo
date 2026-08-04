@@ -137,16 +137,32 @@ func NewPhishingTemplateContext(ctx TemplateContext, r BaseRecipient, rid string
 // safe for concurrent use.
 var templateCache sync.Map
 
+// maxTemplateCacheSize bounds the size of a template body that is kept in
+// templateCache. Content larger than this (e.g. multi-MB attachment bodies such
+// as Office documents or PDFs) is parsed on each call but never cached, so the
+// cache can't grow without bound and leak memory in a long-running process.
+const maxTemplateCacheSize = 64 * 1024
+
 // ExecuteTemplate creates a templated string based on the provided
 // template body and data.
 func ExecuteTemplate(text string, data interface{}) (string, error) {
-	tmplIface, ok := templateCache.Load(text)
+	var tmplIface interface{}
+	var ok bool
+	if len(text) <= maxTemplateCacheSize {
+		tmplIface, ok = templateCache.Load(text)
+	}
 	if !ok {
 		tmpl, err := template.New("template").Parse(text)
 		if err != nil {
 			return "", err
 		}
-		tmplIface, _ = templateCache.LoadOrStore(text, tmpl)
+		// Only cache entries within the size bound; very large bodies bypass
+		// the cache entirely so they can't accumulate in memory.
+		if len(text) <= maxTemplateCacheSize {
+			tmplIface, _ = templateCache.LoadOrStore(text, tmpl)
+		} else {
+			tmplIface = tmpl
+		}
 	}
 	buff := bytes.Buffer{}
 	err := tmplIface.(*template.Template).Execute(&buff, data)

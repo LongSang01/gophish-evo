@@ -828,7 +828,7 @@ func generateUniqueResultIds(n int, tx *gorm.DB) ([]string, error) {
 			return ids, nil
 		}
 	}
-	return ids, nil
+	return nil, errors.New("unable to generate unique result ids after repeated attempts")
 }
 
 // insertResultsBulk inserts the results in chunks, keeping the number of bind
