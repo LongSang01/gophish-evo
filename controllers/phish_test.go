@@ -105,7 +105,7 @@ func clickLink(t *testing.T, ctx *testContext, rid string, expectedHTML string) 
 		t.Fatalf("error reading payload from / endpoint response: %v", err)
 	}
 	if !bytes.Equal(got, []byte(expectedHTML)) {
-		t.Fatalf("invalid response received from / endpoint. expected %s got %s", got, expectedHTML)
+		t.Fatalf("invalid response received from / endpoint. expected %s got %s", expectedHTML, got)
 	}
 }
 
@@ -208,8 +208,13 @@ func TestClickedPhishingLinkAfterOpen(t *testing.T) {
 		t.Fatalf("unexpected result status received. expected %s got %s", models.StatusSending, result.Status)
 	}
 
+	page, err := models.GetPage(campaign.PageId, campaign.UserId)
+	if err != nil {
+		t.Fatalf("error getting page for campaign: %v", err)
+	}
+
 	openEmail(t, ctx, result.RId)
-	clickLink(t, ctx, result.RId, campaign.Page.HTML)
+	clickLink(t, ctx, result.RId, page.HTML)
 
 	campaign = getFirstCampaign(t)
 	result = campaign.Results[0]
