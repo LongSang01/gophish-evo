@@ -369,7 +369,7 @@ func GetCampaigns(uid int64, pp PageParams) ([]Campaign, int64, error) {
 			return cs, 0, err
 		}
 	}
-	query := db.Table("campaigns").Where("user_id=?", uid)
+	query := db.Table("campaigns").Where("user_id=?", uid).Order("created_date DESC")
 	if pp.Valid() {
 		query = query.Limit(pp.PageSize).Offset(pp.Offset())
 	}

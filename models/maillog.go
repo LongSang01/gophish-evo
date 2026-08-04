@@ -17,6 +17,7 @@ import (
 	"github.com/gophish/gophish/config"
 	log "github.com/gophish/gophish/logger"
 	"github.com/gophish/gophish/mailer"
+	"github.com/jinzhu/gorm"
 )
 
 // MaxSendAttempts set to 8 since we exponentially backoff after each failed send
@@ -405,12 +406,29 @@ func LockMailLogs(ms []*MailLog, lock bool) error {
 		ids[i] = ms[i].Id
 	}
 	tx := db.Begin()
-	err := tx.Model(&MailLog{}).Where("id IN (?)", ids).Update("processing", lock).Error
-	if err != nil {
+	if err := lockMailLogsChunked(tx, ids, lock); err != nil {
 		tx.Rollback()
 		return err
 	}
 	tx.Commit()
+	return nil
+}
+
+// lockMailLogsChunked updates the processing flag in chunks, keeping the number
+// of bind variables within SQLite's per-statement limit.
+func lockMailLogsChunked(tx *gorm.DB, ids []int64, lock bool) error {
+	const batchSize = 800
+	for start := 0; start < len(ids); start += batchSize {
+		end := start + batchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		if err := tx.Model(&MailLog{}).
+			Where("id IN (?)", ids[start:end]).
+			Update("processing", lock).Error; err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

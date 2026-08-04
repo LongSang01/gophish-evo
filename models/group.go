@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"sort"
 	"time"
 
 	log "github.com/gophish/gophish/logger"
@@ -315,10 +316,12 @@ func DeleteGroup(g *Group) error {
 }
 
 // insertTargetsIntoGroup imports the given targets into the group, preserving
-// the previous FirstOrCreate semantics (a target is only reused if the email,
-// full name and position all match). It replaces one round-trip per target with
-// a few batched queries: a single lookup of existing targets, one (chunked)
-// INSERT for new targets, and one (chunked) INSERT for the group mappings.
+// the previous FirstOrCreate semantics: a target is reused when it matches an
+// existing record, where empty fields act as wildcards (so a target given with
+// only an email matches any existing target with that email). It replaces one
+// round-trip per target with a few batched queries: one (chunked) lookup of
+// existing targets, one (chunked) INSERT for new targets, and one (chunked)
+// INSERT for the group mappings.
 func insertTargetsIntoGroup(tx *gorm.DB, targets []Target, gid int64) error {
 	if len(targets) == 0 {
 		return nil
@@ -331,6 +334,21 @@ func insertTargetsIntoGroup(tx *gorm.DB, targets []Target, gid int64) error {
 	}
 	keyOf := func(email, fullName, position string) string {
 		return email + "\x00" + fullName + "\x00" + position
+	}
+	// matches reports whether t can reuse c under gorm's FirstOrCreate rules:
+	// every non-empty field of t must equal c's, while empty fields are
+	// wildcards.
+	matches := func(t Target, c *rec) bool {
+		if t.Email != c.Email {
+			return false
+		}
+		if t.FullName != "" && t.FullName != c.FullName {
+			return false
+		}
+		if t.Position != "" && t.Position != c.Position {
+			return false
+		}
+		return true
 	}
 	// Validate every email up front, matching the previous behavior of stopping
 	// on the first invalid address (which aborts the whole transaction).
@@ -346,11 +364,9 @@ func insertTargetsIntoGroup(tx *gorm.DB, targets []Target, gid int64) error {
 	for e := range emails {
 		emailList = append(emailList, e)
 	}
-	// Existing targets keyed by (email, full name, position). If multiple rows
-	// match, keep the lowest id to stay consistent with gorm's First() (lowest
-	// primary key).
-	existing := make(map[string]int64)
-	existingRows := []rec{}
+	// Existing targets keyed by email, ordered by id ascending so the first
+	// wildcard match mirrors gorm's First() (lowest primary key wins).
+	existingPool := make(map[string][]*rec)
 	for _, chunk := range chunkStrings(emailList) {
 		rows := []rec{}
 		if err := tx.Table("targets").
@@ -359,44 +375,76 @@ func insertTargetsIntoGroup(tx *gorm.DB, targets []Target, gid int64) error {
 			log.Error(err)
 			return err
 		}
-		existingRows = append(existingRows, rows...)
-	}
-	for _, r := range existingRows {
-		k := keyOf(r.Email, r.FullName, r.Position)
-		if id, ok := existing[k]; !ok || r.Id < id {
-			existing[k] = r.Id
+		for i := range rows {
+			r := rows[i]
+			existingPool[r.Email] = append(existingPool[r.Email], &r)
 		}
 	}
-	// Determine which targets need to be newly created.
-	newByKey := map[string]Target{}
-	for _, t := range targets {
-		k := keyOf(t.Email, t.FullName, t.Position)
-		if _, ok := existing[k]; ok {
+	for _, cands := range existingPool {
+		sort.Slice(cands, func(i, j int) bool { return cands[i].Id < cands[j].Id })
+	}
+	// Walk the targets in order, resolving each to a record. Existing records
+	// take precedence (they carry the lower primary keys), then records created
+	// earlier in this import, exactly like FirstOrCreate after each insert.
+	createdPool := make(map[string][]*rec)
+	resolved := make([]*rec, len(targets))
+	for i, t := range targets {
+		var match *rec
+		for _, c := range existingPool[t.Email] {
+			if matches(t, c) {
+				match = c
+				break
+			}
+		}
+		if match == nil {
+			for _, c := range createdPool[t.Email] {
+				if matches(t, c) {
+					match = c
+					break
+				}
+			}
+		}
+		if match != nil {
+			resolved[i] = match
 			continue
 		}
-		newByKey[k] = t
+		r := &rec{Email: t.Email, FullName: t.FullName, Position: t.Position}
+		createdPool[t.Email] = append(createdPool[t.Email], r)
+		resolved[i] = r
 	}
-	// Insert the new targets, then read back their assigned ids.
-	if len(newByKey) > 0 {
-		if err := insertTargetsBulk(tx, newByKey); err != nil {
+	// Insert the new targets in one (chunked) batch, then read back their
+	// assigned ids. Wildcard matching guarantees the new records are pairwise
+	// non-matching, so resolving them by exact (email, full name, position) is
+	// unambiguous.
+	placeholders := []*rec{}
+	for _, cands := range createdPool {
+		placeholders = append(placeholders, cands...)
+	}
+	if len(placeholders) > 0 {
+		newTargets := make([]Target, 0, len(placeholders))
+		newEmails := make([]string, 0, len(placeholders))
+		for _, r := range placeholders {
+			newTargets = append(newTargets, Target{BaseRecipient: BaseRecipient{Email: r.Email, FullName: r.FullName, Position: r.Position}})
+			newEmails = append(newEmails, r.Email)
+		}
+		if err := insertTargetsBulk(tx, newTargets); err != nil {
 			return err
 		}
-		newEmails := make([]string, 0, len(newByKey))
-		for _, t := range newByKey {
-			newEmails = append(newEmails, t.Email)
+		byTriplet := make(map[string]*rec, len(placeholders))
+		for _, r := range placeholders {
+			byTriplet[keyOf(r.Email, r.FullName, r.Position)] = r
 		}
 		for _, chunk := range chunkStrings(newEmails) {
-			resolved := []rec{}
+			resolvedRows := []rec{}
 			if err := tx.Table("targets").
 				Select("id, email, full_name, position").
-				Where("email IN (?)", chunk).Scan(&resolved).Error; err != nil {
+				Where("email IN (?)", chunk).Scan(&resolvedRows).Error; err != nil {
 				log.Error(err)
 				return err
 			}
-			for _, r := range resolved {
-				k := keyOf(r.Email, r.FullName, r.Position)
-				if _, ok := newByKey[k]; ok {
-					existing[k] = r.Id
+			for _, r := range resolvedRows {
+				if p, ok := byTriplet[keyOf(r.Email, r.FullName, r.Position)]; ok {
+					p.Id = r.Id
 				}
 			}
 		}
@@ -404,13 +452,12 @@ func insertTargetsIntoGroup(tx *gorm.DB, targets []Target, gid int64) error {
 	// Build the group_targets mappings, one per input target (duplicates produce
 	// duplicate mappings, matching the previous per-target behavior).
 	mapping := make([]int64, 0, len(targets))
-	for _, t := range targets {
-		k := keyOf(t.Email, t.FullName, t.Position)
-		id, ok := existing[k]
-		if !ok {
-			return fmt.Errorf("target %q missing after import", t.Email)
+	for i := range targets {
+		p := resolved[i]
+		if p == nil || p.Id == 0 {
+			return fmt.Errorf("target %q missing after import", targets[i].Email)
 		}
-		mapping = append(mapping, id)
+		mapping = append(mapping, p.Id)
 	}
 	return insertGroupTargetsBulk(tx, gid, mapping)
 }
@@ -432,16 +479,12 @@ func chunkStrings(vals []string) [][]string {
 
 // insertTargetsBulk inserts the newly created targets in chunks, keeping the
 // number of bind variables within SQLite's per-statement limit.
-func insertTargetsBulk(tx *gorm.DB, byKey map[string]Target) error {
-	keys := make([]string, 0, len(byKey))
-	for k := range byKey {
-		keys = append(keys, k)
-	}
+func insertTargetsBulk(tx *gorm.DB, targets []Target) error {
 	const batchSize = 300
-	for start := 0; start < len(keys); start += batchSize {
+	for start := 0; start < len(targets); start += batchSize {
 		end := start + batchSize
-		if end > len(keys) {
-			end = len(keys)
+		if end > len(targets) {
+			end = len(targets)
 		}
 		sql := "INSERT INTO targets (email, full_name, position) VALUES"
 		var args []interface{}
@@ -450,7 +493,7 @@ func insertTargetsBulk(tx *gorm.DB, byKey map[string]Target) error {
 				sql += ","
 			}
 			sql += " (?,?,?)"
-			t := byKey[keys[i]]
+			t := targets[i]
 			args = append(args, t.Email, t.FullName, t.Position)
 		}
 		if err := tx.Exec(sql, args...).Error; err != nil {
