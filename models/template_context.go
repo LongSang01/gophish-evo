@@ -2,6 +2,7 @@ package models
 
 import (
 	"bytes"
+	"container/list"
 	"encoding/base64"
 	"fmt"
 	"net/mail"
@@ -133,39 +134,92 @@ func NewPhishingTemplateContext(ctx TemplateContext, r BaseRecipient, rid string
 // templateCache caches parsed templates keyed by the template text itself
 // rather than by a template ID. Keying on content means edits to a template or
 // page body immediately produce a new cache entry, so rendered output is
-// always based on the current content. The parsed templates are read-only and
-// safe for concurrent use.
-var templateCache sync.Map
+// always based on the current content. The cache is bounded: both the maximum
+// size of a single entry and the maximum number of entries are capped, so it
+// can't grow without bound in a long-running process. Evicted entries are
+// simply re-parsed on the next use, which is safe since templates are
+// read-only.
+type templateCache struct {
+	mu      sync.Mutex
+	ll      *list.List
+	entries map[string]*list.Element
+}
 
-// maxTemplateCacheSize bounds the size of a template body that is kept in
-// templateCache. Content larger than this (e.g. multi-MB attachment bodies such
-// as Office documents or PDFs) is parsed on each call but never cached, so the
-// cache can't grow without bound and leak memory in a long-running process.
+type templateCacheEntry struct {
+	text string
+	tmpl *template.Template
+}
+
+// maxTemplateCacheSize bounds the size of a single template body kept in the
+// cache. Content larger than this (e.g. multi-MB attachment bodies such as
+// Office documents or PDFs) is parsed on each call but never cached, so one
+// huge attachment can't monopolize memory.
 const maxTemplateCacheSize = 64 * 1024
+
+// maxTemplateCacheEntries bounds the total number of cached templates.
+// Least-recently-used entries are evicted once the cache is full, preventing
+// unbounded growth from accumulated template and page versions.
+const maxTemplateCacheEntries = 1024
+
+var templateCacheInstance = &templateCache{
+	ll:      list.New(),
+	entries: make(map[string]*list.Element),
+}
+
+// load returns the cached template for text, marking it most-recently-used.
+func (c *templateCache) load(text string) (*template.Template, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	el, ok := c.entries[text]
+	if !ok {
+		return nil, false
+	}
+	c.ll.MoveToFront(el)
+	return el.Value.(*templateCacheEntry).tmpl, true
+}
+
+// store inserts a template for text, evicting the least-recently-used entry if
+// the cache is full. If text is already present it is just refreshed.
+func (c *templateCache) store(text string, tmpl *template.Template) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if el, ok := c.entries[text]; ok {
+		c.ll.MoveToFront(el)
+		return
+	}
+	if c.ll.Len() >= maxTemplateCacheEntries {
+		oldest := c.ll.Back()
+		if oldest != nil {
+			c.ll.Remove(oldest)
+			delete(c.entries, oldest.Value.(*templateCacheEntry).text)
+		}
+	}
+	el := c.ll.PushFront(&templateCacheEntry{text: text, tmpl: tmpl})
+	c.entries[text] = el
+}
 
 // ExecuteTemplate creates a templated string based on the provided
 // template body and data.
 func ExecuteTemplate(text string, data interface{}) (string, error) {
-	var tmplIface interface{}
+	var tmpl *template.Template
 	var ok bool
 	if len(text) <= maxTemplateCacheSize {
-		tmplIface, ok = templateCache.Load(text)
+		tmpl, ok = templateCacheInstance.load(text)
 	}
 	if !ok {
-		tmpl, err := template.New("template").Parse(text)
+		var err error
+		tmpl, err = template.New("template").Parse(text)
 		if err != nil {
 			return "", err
 		}
 		// Only cache entries within the size bound; very large bodies bypass
-		// the cache entirely so they can't accumulate in memory.
+		// the cache entirely so they can't monopolize memory.
 		if len(text) <= maxTemplateCacheSize {
-			tmplIface, _ = templateCache.LoadOrStore(text, tmpl)
-		} else {
-			tmplIface = tmpl
+			templateCacheInstance.store(text, tmpl)
 		}
 	}
 	buff := bytes.Buffer{}
-	err := tmplIface.(*template.Template).Execute(&buff, data)
+	err := tmpl.Execute(&buff, data)
 	return buff.String(), err
 }
 
