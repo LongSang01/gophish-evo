@@ -4,8 +4,8 @@ enum Api {
   Webhooks = '/webhooks',
 }
 
-export function getWebhooks(): Promise<any[]> {
-  return defHttp.get({ url: `${Api.Webhooks}/` });
+export function getWebhooks(params?: { pageNum?: number; pageSize?: number }): Promise<any> {
+  return defHttp.get({ url: `${Api.Webhooks}/`, params });
 }
 
 export function getWebhook(id: number): Promise<any> {

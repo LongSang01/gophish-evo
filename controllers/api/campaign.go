@@ -17,11 +17,12 @@ import (
 func (as *Server) Campaigns(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
-		cs, err := models.GetCampaigns(ctx.Get(r, "user_id").(int64))
+		pp := parsePagination(r)
+		cs, total, err := models.GetCampaigns(ctx.Get(r, "user_id").(int64), pp)
 		if err != nil {
 			log.Error(err)
 		}
-		JSONResponse(w, cs, http.StatusOK)
+		pagedJSONResponse(w, http.StatusOK, pp, cs, total)
 	//POST: Create a new campaign and return it as JSON
 	case r.Method == "POST":
 		c := models.Campaign{}
@@ -49,7 +50,8 @@ func (as *Server) Campaigns(w http.ResponseWriter, r *http.Request) {
 func (as *Server) CampaignsSummary(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
-		cs, err := models.GetCampaignSummaries(ctx.Get(r, "user_id").(int64))
+		pp := parsePagination(r)
+		cs, err := models.GetCampaignSummaries(ctx.Get(r, "user_id").(int64), pp)
 		if err != nil {
 			log.Error(err)
 			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
@@ -88,7 +90,8 @@ func (as *Server) Campaign(w http.ResponseWriter, r *http.Request) {
 func (as *Server) CampaignResults(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
-	cr, err := models.GetCampaignResults(id, ctx.Get(r, "user_id").(int64))
+	pp := parsePagination(r)
+	cr, err := models.GetCampaignResults(id, ctx.Get(r, "user_id").(int64), pp)
 	if err != nil {
 		log.Error(err)
 		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)

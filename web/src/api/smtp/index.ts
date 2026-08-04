@@ -4,8 +4,8 @@ enum Api {
   SMTP = '/smtp',
 }
 
-export function getSMTPProfiles(): Promise<any[]> {
-  return defHttp.get({ url: `${Api.SMTP}/` });
+export function getSMTPProfiles(params?: { pageNum?: number; pageSize?: number }): Promise<any> {
+  return defHttp.get({ url: `${Api.SMTP}/`, params });
 }
 
 export function getSMTPProfile(id: number): Promise<any> {

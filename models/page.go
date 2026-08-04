@@ -89,14 +89,28 @@ func (p *Page) Validate() error {
 }
 
 // GetPages returns the pages owned by the given user.
-func GetPages(uid int64) ([]Page, error) {
+func GetPages(uid int64, pp PageParams) ([]Page, int64, error) {
 	ps := []Page{}
-	err := db.Where("user_id=?", uid).Find(&ps).Error
+	var total int64
+	if pp.Valid() {
+		if err := db.Table("pages").Where("user_id=?", uid).Count(&total).Error; err != nil {
+			log.Error(err)
+			return ps, 0, err
+		}
+	}
+	query := db.Where("user_id=?", uid).Order("modified_date DESC")
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
+	err := query.Find(&ps).Error
 	if err != nil {
 		log.Error(err)
-		return ps, err
+		return ps, 0, err
 	}
-	return ps, err
+	if !pp.Valid() {
+		total = int64(len(ps))
+	}
+	return ps, total, nil
 }
 
 // GetPage returns the page, if it exists, specified by the given id and user_id.

@@ -4,8 +4,8 @@ enum Api {
   Users = '/users',
 }
 
-export function getUsers(): Promise<any[]> {
-  return defHttp.get({ url: `${Api.Users}/` });
+export function getUsers(params?: { pageNum?: number; pageSize?: number }): Promise<any> {
+  return defHttp.get({ url: `${Api.Users}/`, params });
 }
 
 export function getUser(id: number): Promise<any> {

@@ -22,10 +22,28 @@ var ErrURLNotSpecified = errors.New("URL can't be empty")
 var ErrNameNotSpecified = errors.New("Name can't be empty")
 
 // GetWebhooks returns the webhooks
-func GetWebhooks() ([]Webhook, error) {
+func GetWebhooks(pp PageParams) ([]Webhook, int64, error) {
 	whs := []Webhook{}
-	err := db.Find(&whs).Error
-	return whs, err
+	var total int64
+	if pp.Valid() {
+		if err := db.Table("webhooks").Count(&total).Error; err != nil {
+			log.Error(err)
+			return whs, 0, err
+		}
+	}
+	query := db.Order("id DESC")
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
+	err := query.Find(&whs).Error
+	if err != nil {
+		log.Error(err)
+		return whs, 0, err
+	}
+	if !pp.Valid() {
+		total = int64(len(whs))
+	}
+	return whs, total, nil
 }
 
 // GetActiveWebhooks returns the active webhooks

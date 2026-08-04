@@ -17,11 +17,12 @@ import (
 func (as *Server) Templates(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
-		ts, err := models.GetTemplates(ctx.Get(r, "user_id").(int64))
+		pp := parsePagination(r)
+		ts, total, err := models.GetTemplates(ctx.Get(r, "user_id").(int64), pp)
 		if err != nil {
 			log.Error(err)
 		}
-		JSONResponse(w, ts, http.StatusOK)
+		pagedJSONResponse(w, http.StatusOK, pp, ts, total)
 	//POST: Create a new template and return it as JSON
 	case r.Method == "POST":
 		t := models.Template{}

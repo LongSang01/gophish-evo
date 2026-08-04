@@ -4,8 +4,8 @@ enum Api {
   Groups = '/groups',
 }
 
-export function getGroups(): Promise<any[]> {
-  return defHttp.get({ url: `${Api.Groups}/` });
+export function getGroups(params?: { pageNum?: number; pageSize?: number }): Promise<any> {
+  return defHttp.get({ url: `${Api.Groups}/`, params });
 }
 
 export function getGroupsSummary(): Promise<any> {

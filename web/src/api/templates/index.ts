@@ -4,8 +4,8 @@ enum Api {
   Templates = '/templates',
 }
 
-export function getTemplates(): Promise<any[]> {
-  return defHttp.get({ url: `${Api.Templates}/` });
+export function getTemplates(params?: { pageNum?: number; pageSize?: number }): Promise<any> {
+  return defHttp.get({ url: `${Api.Templates}/`, params });
 }
 
 export function getTemplate(id: number): Promise<any> {

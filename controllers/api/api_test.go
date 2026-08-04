@@ -391,6 +391,58 @@ func TestGetGroups(t *testing.T) {
 	}
 }
 
+func TestGetGroupsPagination(t *testing.T) {
+	tc := setupTest(t)
+	for i := 0; i < 5; i++ {
+		g := models.Group{
+			Name: fmt.Sprintf("Group %d", i),
+			Targets: []models.Target{
+				{BaseRecipient: models.BaseRecipient{Email: fmt.Sprintf("test%d@example.com", i)}},
+			},
+			UserId: 1,
+		}
+		if err := models.PostGroup(&g); err != nil {
+			t.Fatalf("error creating group: %v", err)
+		}
+	}
+
+	r := httptest.NewRequest(http.MethodGet, "/api/groups/?pageNum=1&pageSize=2", nil)
+	r = ctx.Set(r, "user_id", int64(1))
+	w := httptest.NewRecorder()
+	tc.apiServer.Groups(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
+	}
+	resp := models.PagedResponse{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp.Total != 5 {
+		t.Fatalf("expected total 5 got %d", resp.Total)
+	}
+	gs, ok := resp.Data.([]interface{})
+	if !ok {
+		t.Fatalf("expected data to be an array, got %T", resp.Data)
+	}
+	if len(gs) != 2 {
+		t.Fatalf("expected 2 rows on page 1 got %d", len(gs))
+	}
+
+	// Second page should return the remaining rows
+	r = httptest.NewRequest(http.MethodGet, "/api/groups/?pageNum=3&pageSize=2", nil)
+	r = ctx.Set(r, "user_id", int64(1))
+	w = httptest.NewRecorder()
+	tc.apiServer.Groups(w, r)
+	resp = models.PagedResponse{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp.Total != 5 {
+		t.Fatalf("expected total 5 got %d", resp.Total)
+	}
+	gs, _ = resp.Data.([]interface{})
+	if len(gs) != 1 {
+		t.Fatalf("expected 1 row on page 3 got %d", len(gs))
+	}
+}
+
 func TestCreateGroup(t *testing.T) {
 	tc := setupTest(t)
 

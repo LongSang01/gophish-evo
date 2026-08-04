@@ -40,6 +40,7 @@ type CampaignResults struct {
 	Id      int64    `json:"id"`
 	Name    string   `json:"name"`
 	Status  string   `json:"status"`
+	Total   int64    `json:"total"`
 	Results []Result `json:"results,omitempty"`
 	Events  []Event  `json:"timeline,omitempty"`
 	SMTPs   []SMTP   `json:"smtps,omitempty"`
@@ -359,11 +360,23 @@ func getCampaignStats(cid int64) (CampaignStats, error) {
 }
 
 // GetCampaigns returns the campaigns owned by the given user.
-func GetCampaigns(uid int64) ([]Campaign, error) {
+func GetCampaigns(uid int64, pp PageParams) ([]Campaign, int64, error) {
 	cs := []Campaign{}
-	err := db.Model(&User{Id: uid}).Related(&cs).Error
+	var total int64
+	if pp.Valid() {
+		if err := db.Table("campaigns").Where("user_id=?", uid).Count(&total).Error; err != nil {
+			log.Error(err)
+			return cs, 0, err
+		}
+	}
+	query := db.Table("campaigns").Where("user_id=?", uid)
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
+	err := query.Find(&cs).Error
 	if err != nil {
 		log.Error(err)
+		return cs, 0, err
 	}
 	for i := range cs {
 		err = cs[i].getDetails()
@@ -371,17 +384,30 @@ func GetCampaigns(uid int64) ([]Campaign, error) {
 			log.Error(err)
 		}
 	}
-	return cs, err
+	if !pp.Valid() {
+		total = int64(len(cs))
+	}
+	return cs, total, nil
 }
 
 // GetCampaignSummaries gets the summary objects for all the campaigns
 // owned by the current user
-func GetCampaignSummaries(uid int64) (CampaignSummaries, error) {
+func GetCampaignSummaries(uid int64, pp PageParams) (CampaignSummaries, error) {
 	overview := CampaignSummaries{}
 	cs := []CampaignSummary{}
 	// Get the basic campaign information
 	query := db.Table("campaigns").Where("user_id = ?", uid)
 	query = query.Select("id, name, created_date, launch_date, send_by_date, completed_date, status")
+	query = query.Order("created_date DESC")
+	if pp.Valid() {
+		var total int64
+		if err := db.Table("campaigns").Where("user_id = ?", uid).Count(&total).Error; err != nil {
+			log.Error(err)
+			return overview, err
+		}
+		overview.Total = total
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
 	err := query.Scan(&cs).Error
 	if err != nil {
 		log.Error(err)
@@ -395,7 +421,9 @@ func GetCampaignSummaries(uid int64) (CampaignSummaries, error) {
 		}
 		cs[i].Stats = s
 	}
-	overview.Total = int64(len(cs))
+	if !pp.Valid() {
+		overview.Total = int64(len(cs))
+	}
 	overview.Campaigns = cs
 	return overview, nil
 }
@@ -470,7 +498,7 @@ func GetCampaign(id int64, uid int64) (Campaign, error) {
 }
 
 // GetCampaignResults returns just the campaign results for the given campaign
-func GetCampaignResults(id int64, uid int64) (CampaignResults, error) {
+func GetCampaignResults(id int64, uid int64, pp PageParams) (CampaignResults, error) {
 	cr := CampaignResults{}
 	err := db.Table("campaigns").Where("id=? and user_id=?", id, uid).Find(&cr).Error
 	if err != nil {
@@ -480,10 +508,21 @@ func GetCampaignResults(id int64, uid int64) (CampaignResults, error) {
 		}).Error(err)
 		return cr, err
 	}
-	err = db.Table("results").Where("campaign_id=? and user_id=?", cr.Id, uid).Find(&cr.Results).Error
+	query := db.Table("results").Where("campaign_id=? and user_id=?", cr.Id, uid).Order("id ASC")
+	if pp.Valid() {
+		if err := db.Table("results").Where("campaign_id=? and user_id=?", cr.Id, uid).Count(&cr.Total).Error; err != nil {
+			log.Errorf("%s: results not found for campaign", err)
+			return cr, err
+		}
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
+	err = query.Find(&cr.Results).Error
 	if err != nil {
 		log.Errorf("%s: results not found for campaign", err)
 		return cr, err
+	}
+	if !pp.Valid() {
+		cr.Total = int64(len(cr.Results))
 	}
 	err = db.Table("events").Where("campaign_id=?", cr.Id).Find(&cr.Events).Error
 	if err != nil {

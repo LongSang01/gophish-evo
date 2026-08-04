@@ -18,12 +18,13 @@ import (
 func (as *Server) Groups(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
-		gs, err := models.GetGroups(ctx.Get(r, "user_id").(int64))
+		pp := parsePagination(r)
+		gs, total, err := models.GetGroups(ctx.Get(r, "user_id").(int64), pp)
 		if err != nil {
 			JSONResponse(w, models.Response{Success: false, Message: "No groups found"}, http.StatusNotFound)
 			return
 		}
-		JSONResponse(w, gs, http.StatusOK)
+		pagedJSONResponse(w, http.StatusOK, pp, gs, total)
 	//POST: Create a new group and return it as JSON
 	case r.Method == "POST":
 		g := models.Group{}

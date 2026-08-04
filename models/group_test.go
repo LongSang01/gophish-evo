@@ -56,7 +56,7 @@ func (s *ModelsSuite) TestGetGroups(c *check.C) {
 	})
 
 	// Get groups and test result.
-	groups, err := GetGroups(1)
+	groups, _, err := GetGroups(1, PageParams{})
 	c.Assert(err, check.Equals, nil)
 	c.Assert(len(groups), check.Equals, 2)
 	c.Assert(len(groups[0].Targets), check.Equals, 1)
@@ -68,7 +68,7 @@ func (s *ModelsSuite) TestGetGroups(c *check.C) {
 }
 
 func (s *ModelsSuite) TestGetGroupsNoGroups(c *check.C) {
-	groups, err := GetGroups(1)
+	groups, _, err := GetGroups(1, PageParams{})
 	c.Assert(err, check.Equals, nil)
 	c.Assert(len(groups), check.Equals, 0)
 }

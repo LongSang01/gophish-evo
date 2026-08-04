@@ -34,10 +34,28 @@ func GetUser(id int64) (User, error) {
 }
 
 // GetUsers returns the users registered in Gophish
-func GetUsers() ([]User, error) {
+func GetUsers(pp PageParams) ([]User, int64, error) {
 	us := []User{}
-	err := db.Preload("Role").Find(&us).Error
-	return us, err
+	var total int64
+	if pp.Valid() {
+		if err := db.Table("users").Count(&total).Error; err != nil {
+			log.Error(err)
+			return us, 0, err
+		}
+	}
+	query := db.Preload("Role").Order("id DESC")
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
+	err := query.Find(&us).Error
+	if err != nil {
+		log.Error(err)
+		return us, 0, err
+	}
+	if !pp.Valid() {
+		total = int64(len(us))
+	}
+	return us, total, nil
 }
 
 // GetUserByAPIKey returns the user that the given API Key corresponds to. If no user is found, an
@@ -96,7 +114,7 @@ func DeleteUser(id int64) error {
 			return err
 		}
 	}
-	campaigns, err := GetCampaigns(id)
+	campaigns, _, err := GetCampaigns(id, PageParams{})
 	if err != nil {
 		return err
 	}
@@ -110,7 +128,7 @@ func DeleteUser(id int64) error {
 	}
 	log.Infof("Deleting pages for user ID %d", id)
 	// Delete the landing pages
-	pages, err := GetPages(id)
+	pages, _, err := GetPages(id, PageParams{})
 	if err != nil {
 		return err
 	}
@@ -122,7 +140,7 @@ func DeleteUser(id int64) error {
 	}
 	// Delete the templates
 	log.Infof("Deleting templates for user ID %d", id)
-	templates, err := GetTemplates(id)
+	templates, _, err := GetTemplates(id, PageParams{})
 	if err != nil {
 		return err
 	}
@@ -134,7 +152,7 @@ func DeleteUser(id int64) error {
 	}
 	// Delete the groups
 	log.Infof("Deleting groups for user ID %d", id)
-	groups, err := GetGroups(id)
+	groups, _, err := GetGroups(id, PageParams{})
 	if err != nil {
 		return err
 	}
@@ -146,7 +164,7 @@ func DeleteUser(id int64) error {
 	}
 	// Delete the sending profiles
 	log.Infof("Deleting sending profiles for user ID %d", id)
-	profiles, err := GetSMTPs(id)
+	profiles, _, err := GetSMTPs(id, PageParams{})
 	if err != nil {
 		return err
 	}

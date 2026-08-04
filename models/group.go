@@ -92,12 +92,23 @@ func (g *Group) Validate() error {
 }
 
 // GetGroups returns the groups owned by the given user.
-func GetGroups(uid int64) ([]Group, error) {
+func GetGroups(uid int64, pp PageParams) ([]Group, int64, error) {
 	gs := []Group{}
-	err := db.Where("user_id=?", uid).Find(&gs).Error
+	var total int64
+	if pp.Valid() {
+		if err := db.Table("groups").Where("user_id=?", uid).Count(&total).Error; err != nil {
+			log.Error(err)
+			return gs, 0, err
+		}
+	}
+	query := db.Where("user_id=?", uid).Order("modified_date DESC")
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
+	err := query.Find(&gs).Error
 	if err != nil {
 		log.Error(err)
-		return gs, err
+		return gs, 0, err
 	}
 	for i := range gs {
 		gs[i].Targets, err = GetTargets(gs[i].Id)
@@ -105,7 +116,10 @@ func GetGroups(uid int64) ([]Group, error) {
 			log.Error(err)
 		}
 	}
-	return gs, nil
+	if !pp.Valid() {
+		total = int64(len(gs))
+	}
+	return gs, total, nil
 }
 
 // GetGroupSummaries returns the summaries for the groups

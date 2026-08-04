@@ -17,11 +17,12 @@ import (
 func (as *Server) SendingProfiles(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
-		ss, err := models.GetSMTPs(ctx.Get(r, "user_id").(int64))
+		pp := parsePagination(r)
+		ss, total, err := models.GetSMTPs(ctx.Get(r, "user_id").(int64), pp)
 		if err != nil {
 			log.Error(err)
 		}
-		JSONResponse(w, ss, http.StatusOK)
+		pagedJSONResponse(w, http.StatusOK, pp, ss, total)
 	//POST: Create a new SMTP and return it as JSON
 	case r.Method == "POST":
 		s := models.SMTP{}

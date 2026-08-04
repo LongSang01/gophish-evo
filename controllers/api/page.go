@@ -17,11 +17,12 @@ import (
 func (as *Server) Pages(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
-		ps, err := models.GetPages(ctx.Get(r, "user_id").(int64))
+		pp := parsePagination(r)
+		ps, total, err := models.GetPages(ctx.Get(r, "user_id").(int64), pp)
 		if err != nil {
 			log.Error(err)
 		}
-		JSONResponse(w, ps, http.StatusOK)
+		pagedJSONResponse(w, http.StatusOK, pp, ps, total)
 	//POST: Create a new page and return it as JSON
 	case r.Method == "POST":
 		p := models.Page{}

@@ -11,7 +11,8 @@
         :columns="columns"
         :data-source="users"
         :loading="loading"
-        :pagination="{ pageSize: 10 }"
+        :pagination="pagination"
+        @change="handleTableChange"
         row-key="id"
       >
         <template #bodyCell="{ column, record }">
@@ -78,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import { PlusOutlined } from '@ant-design/icons-vue';
 import { getUsers, createUser, updateUser, deleteUser } from '@/api/users';
@@ -89,6 +90,13 @@ const saving = ref(false);
 const users = ref<any[]>([]);
 const modalVisible = ref(false);
 const editingUser = ref<any>(null);
+const pagination = reactive({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+  showSizeChanger: true,
+  showTotal: (total: number) => `共 ${total} 条`,
+});
 
 const isAdminUser = computed(() => editingUser.value?.username === 'admin');
 
@@ -115,14 +123,25 @@ onMounted(() => {
 async function loadUsers() {
   loading.value = true;
   try {
-    users.value = (await getUsers()).sort(
-      (a: any, b: any) => (b.id || 0) - (a.id || 0)
-    );
+    const result = await getUsers({ pageNum: pagination.current, pageSize: pagination.pageSize });
+    users.value = result.data || [];
+    pagination.total = result.total || 0;
   } catch (error) {
     message.error('加载用户列表失败');
   } finally {
     loading.value = false;
   }
+}
+
+function handleTableChange(pag: any) {
+  pagination.current = pag.current;
+  pagination.pageSize = pag.pageSize;
+  loadUsers();
+}
+
+function resetPagination() {
+  pagination.current = 1;
+  loadUsers();
 }
 
 function showCreateModal() {
@@ -189,7 +208,7 @@ async function handleSave() {
       message.success('用户创建成功');
     }
     modalVisible.value = false;
-    loadUsers();
+    resetPagination();
   } catch (error: any) {
     message.error(error?.response?.data?.message || error?.message || '保存失败');
   } finally {
@@ -212,7 +231,7 @@ function handleDelete(user: any) {
       try {
         await deleteUser(user.id);
         message.success('删除成功');
-        loadUsers();
+        resetPagination();
       } catch (error) {
         message.error('删除失败');
       }

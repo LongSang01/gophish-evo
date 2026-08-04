@@ -17,7 +17,7 @@ func (s *ModelsSuite) TestPostSMTP(c *check.C) {
 	}
 	err := PostSMTP(&smtp)
 	c.Assert(err, check.Equals, nil)
-	ss, err := GetSMTPs(1)
+	ss, _, err := GetSMTPs(1, PageParams{})
 	c.Assert(err, check.Equals, nil)
 	c.Assert(len(ss), check.Equals, 1)
 }
@@ -77,7 +77,7 @@ func (s *ModelsSuite) TestPostSMTPValidHeader(c *check.C) {
 	}
 	err := PostSMTP(&smtp)
 	c.Assert(err, check.Equals, nil)
-	ss, err := GetSMTPs(1)
+	ss, _, err := GetSMTPs(1, PageParams{})
 	c.Assert(err, check.Equals, nil)
 	c.Assert(len(ss), check.Equals, 1)
 }

@@ -16,7 +16,8 @@
         :columns="columns"
         :data-source="templates"
         :loading="loading"
-        :pagination="{ pageSize: 10 }"
+        :pagination="pagination"
+        @change="handleTableChange"
         row-key="id"
       >
         <template #bodyCell="{ column, record }">
@@ -193,7 +194,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import { PlusOutlined, EyeOutlined, SendOutlined, ImportOutlined, UploadOutlined, DeleteOutlined } from '@ant-design/icons-vue';
 
@@ -213,6 +214,13 @@ const previewVisible = ref(false);
 const previewHtml = ref('');
 const editingTemplate = ref<any>(null);
 const editorKey = ref(0);
+const pagination = reactive({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+  showSizeChanger: true,
+  showTotal: (total: number) => `共 ${total} 条`,
+});
 
 const attachmentColumns = [
   { title: '文件名', key: 'name' },
@@ -265,14 +273,25 @@ onMounted(() => {
 async function loadTemplates() {
   loading.value = true;
   try {
-    templates.value = (await getTemplates()).sort(
-      (a: any, b: any) => new Date(b.modified_date).getTime() - new Date(a.modified_date).getTime()
-    );
+    const result = await getTemplates({ pageNum: pagination.current, pageSize: pagination.pageSize });
+    templates.value = result.data || [];
+    pagination.total = result.total || 0;
   } catch (error) {
     message.error('加载模板失败');
   } finally {
     loading.value = false;
   }
+}
+
+function handleTableChange(pag: any) {
+  pagination.current = pag.current;
+  pagination.pageSize = pag.pageSize;
+  loadTemplates();
+}
+
+function resetPagination() {
+  pagination.current = 1;
+  loadTemplates();
 }
 
 async function loadSMTPProfiles() {
@@ -378,7 +397,7 @@ async function handleSave() {
       message.success('模板创建成功');
     }
     modalVisible.value = false;
-    loadTemplates();
+    resetPagination();
   } catch (error: any) {
     message.error(error?.response?.data?.message || error?.message || '保存失败');
   } finally {
@@ -433,7 +452,7 @@ function handleDelete(id: number) {
       try {
         await deleteTemplate(id);
         message.success('删除成功');
-        loadTemplates();
+        resetPagination();
       } catch (error) {
         message.error('删除失败');
       }

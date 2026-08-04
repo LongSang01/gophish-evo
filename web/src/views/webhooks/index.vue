@@ -11,7 +11,8 @@
         :columns="columns"
         :data-source="webhooks"
         :loading="loading"
-        :pagination="{ pageSize: 10 }"
+        :pagination="pagination"
+        @change="handleTableChange"
         row-key="id"
       >
         <template #bodyCell="{ column, record }">
@@ -57,7 +58,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import { PlusOutlined } from '@ant-design/icons-vue';
 import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, validateWebhook } from '@/api/webhooks';
@@ -67,6 +68,13 @@ const saving = ref(false);
 const webhooks = ref<any[]>([]);
 const modalVisible = ref(false);
 const editingWebhook = ref<any>(null);
+const pagination = reactive({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+  showSizeChanger: true,
+  showTotal: (total: number) => `共 ${total} 条`,
+});
 
 const formData = ref({
   name: '',
@@ -90,14 +98,25 @@ onMounted(() => {
 async function loadWebhooks() {
   loading.value = true;
   try {
-    webhooks.value = (await getWebhooks()).sort(
-      (a: any, b: any) => new Date(b.modified_date).getTime() - new Date(a.modified_date).getTime()
-    );
+    const result = await getWebhooks({ pageNum: pagination.current, pageSize: pagination.pageSize });
+    webhooks.value = result.data || [];
+    pagination.total = result.total || 0;
   } catch (error) {
     message.error('加载Webhooks失败');
   } finally {
     loading.value = false;
   }
+}
+
+function handleTableChange(pag: any) {
+  pagination.current = pag.current;
+  pagination.pageSize = pag.pageSize;
+  loadWebhooks();
+}
+
+function resetPagination() {
+  pagination.current = 1;
+  loadWebhooks();
 }
 
 function showCreateModal() {
@@ -133,7 +152,7 @@ async function handleSave() {
       message.success('Webhook创建成功');
     }
     modalVisible.value = false;
-    loadWebhooks();
+    resetPagination();
   } catch (error: any) {
     message.error(error?.message || '保存失败');
   } finally {
@@ -158,7 +177,7 @@ function handleDelete(id: number) {
       try {
         await deleteWebhook(id);
         message.success('删除成功');
-        loadWebhooks();
+        resetPagination();
       } catch (error) {
         message.error('删除失败');
       }

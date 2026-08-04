@@ -98,7 +98,8 @@
         :columns="resultColumns"
         :data-source="results"
         :loading="loadingResults"
-        :pagination="{ pageSize: 20 }"
+        :pagination="pagination"
+        @change="handleTableChange"
         row-key="id"
         :custom-row="(record: any) => ({ onClick: () => showRecipientTimeline(record) })"
         :row-class-name="() => 'clickable-row'"
@@ -164,7 +165,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { message, Modal } from 'ant-design-vue';
 import { CopyOutlined, StopOutlined, PlayCircleOutlined } from '@ant-design/icons-vue';
@@ -182,6 +183,13 @@ const resultChart = ref<HTMLElement | null>(null);
 const drawerVisible = ref(false);
 const drawerEmail = ref('');
 const drawerEvents = ref<any[]>([]);
+const pagination = reactive({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+  showSizeChanger: true,
+  showTotal: (total: number) => `共 ${total} 条`,
+});
 
 const resultColumns = [
   { title: '姓名', dataIndex: 'full_name', key: 'full_name' },
@@ -213,8 +221,9 @@ async function loadCampaign(id: number) {
 async function loadResults(id: number) {
   loadingResults.value = true;
   try {
-    const data = await getCampaignResults(id);
+    const data = await getCampaignResults(id, { pageNum: pagination.current, pageSize: pagination.pageSize });
     results.value = data.results || [];
+    pagination.total = data.total || 0;
     // Merge timeline from results API (may have more events)
     if (data.timeline?.length) {
       allTimeline.value = data.timeline;
@@ -226,6 +235,12 @@ async function loadResults(id: number) {
   }
 }
 
+function handleTableChange(pag: any) {
+  pagination.current = pag.current;
+  pagination.pageSize = pag.pageSize;
+  loadResults(Number(route.params.id));
+}
+
 function showRecipientTimeline(record: any) {
   drawerEmail.value = record.email;
   drawerEvents.value = allTimeline.value
@@ -234,11 +249,17 @@ function showRecipientTimeline(record: any) {
   drawerVisible.value = true;
 }
 
-function exportCSV(scope: string) {
+async function exportCSV(scope: string) {
   let data: any[];
   let filename: string;
   if (scope === 'results') {
-    data = results.value;
+    try {
+      const full = await getCampaignResults(Number(route.params.id));
+      data = full.results || [];
+    } catch {
+      message.error('导出结果失败');
+      return;
+    }
     filename = `${campaign.value.name} - 结果.csv`;
   } else {
     data = allTimeline.value;

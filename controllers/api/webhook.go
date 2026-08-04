@@ -15,13 +15,14 @@ import (
 func (as *Server) Webhooks(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
-		whs, err := models.GetWebhooks()
+		pp := parsePagination(r)
+		whs, total, err := models.GetWebhooks(pp)
 		if err != nil {
 			log.Error(err)
 			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
 			return
 		}
-		JSONResponse(w, whs, http.StatusOK)
+		pagedJSONResponse(w, http.StatusOK, pp, whs, total)
 
 	case r.Method == "POST":
 		wh := models.Webhook{}

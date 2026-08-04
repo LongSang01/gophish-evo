@@ -53,12 +53,23 @@ func (t *Template) Validate() error {
 }
 
 // GetTemplates returns the templates owned by the given user.
-func GetTemplates(uid int64) ([]Template, error) {
+func GetTemplates(uid int64, pp PageParams) ([]Template, int64, error) {
 	ts := []Template{}
-	err := db.Where("user_id=?", uid).Find(&ts).Error
+	var total int64
+	if pp.Valid() {
+		if err := db.Table("templates").Where("user_id=?", uid).Count(&total).Error; err != nil {
+			log.Error(err)
+			return ts, 0, err
+		}
+	}
+	query := db.Where("user_id=?", uid).Order("modified_date DESC")
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
+	err := query.Find(&ts).Error
 	if err != nil {
 		log.Error(err)
-		return ts, err
+		return ts, 0, err
 	}
 	for i := range ts {
 		// Get Attachments (exclude content column for performance - content is only needed when editing a single template)
@@ -68,10 +79,13 @@ func GetTemplates(uid int64) ([]Template, error) {
 		}
 		if err != nil && err != gorm.ErrRecordNotFound {
 			log.Error(err)
-			return ts, err
+			return ts, 0, err
 		}
 	}
-	return ts, err
+	if !pp.Valid() {
+		total = int64(len(ts))
+	}
+	return ts, total, nil
 }
 
 // GetTemplate returns the template, if it exists, specified by the given id and user_id.

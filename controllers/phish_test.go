@@ -15,7 +15,7 @@ import (
 )
 
 func getFirstCampaign(t *testing.T) models.Campaign {
-	campaigns, err := models.GetCampaigns(1)
+	campaigns, _, err := models.GetCampaigns(1, models.PageParams{})
 	if err != nil {
 		t.Fatalf("error getting first campaign from database: %v", err)
 	}

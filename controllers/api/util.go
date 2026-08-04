@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/mail"
+	"strconv"
 
 	ctx "github.com/gophish/gophish/context"
 	log "github.com/gophish/gophish/logger"
@@ -11,6 +12,43 @@ import (
 	"github.com/jinzhu/gorm"
 	"github.com/sirupsen/logrus"
 )
+
+// DefaultPageSize is the default page size used for server-side pagination.
+const DefaultPageSize = 10
+
+// MaxPageSize is the largest number of rows that can be requested in a single
+// page, protecting the server from unbounded requests.
+const MaxPageSize = 100
+
+// parsePagination extracts server-side pagination parameters (pageNum,
+// pageSize) from the request query string. When pageSize is absent the
+// returned PageParams is non-valid, meaning the full result set is returned.
+func parsePagination(r *http.Request) models.PageParams {
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("pageNum"))
+	pageSize, _ := strconv.Atoi(q.Get("pageSize"))
+	if pageSize <= 0 {
+		return models.PageParams{}
+	}
+	if pageSize > MaxPageSize {
+		pageSize = MaxPageSize
+	}
+	if page < 1 {
+		page = 1
+	}
+	return models.PageParams{Page: page, PageSize: pageSize}
+}
+
+// pagedJSONResponse writes either a bare collection (when not paginating) or a
+// {total, data} wrapper (when a page was requested) so that legacy un-paginated
+// consumers continue to work unchanged.
+func pagedJSONResponse(w http.ResponseWriter, status int, pp models.PageParams, items interface{}, total int64) {
+	if !pp.Valid() {
+		JSONResponse(w, items, status)
+		return
+	}
+	JSONResponse(w, models.PagedResponse{Total: total, Data: items}, status)
+}
 
 // SendTestEmail sends a test email using the template name
 // and Target given.

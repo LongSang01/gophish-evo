@@ -9,6 +9,7 @@ _test
 
 # Node Modules
 node_modules
+web/dist
 
 # Architecture specific extensions/prefixes
 *.[568vq]

@@ -138,21 +138,35 @@ func (s *SMTP) GetDialer() (mailer.Dialer, error) {
 }
 
 // GetSMTPs returns the SMTPs owned by the given user.
-func GetSMTPs(uid int64) ([]SMTP, error) {
+func GetSMTPs(uid int64, pp PageParams) ([]SMTP, int64, error) {
 	ss := []SMTP{}
-	err := db.Where("user_id=?", uid).Find(&ss).Error
+	var total int64
+	if pp.Valid() {
+		if err := db.Table("smtp").Where("user_id=?", uid).Count(&total).Error; err != nil {
+			log.Error(err)
+			return ss, 0, err
+		}
+	}
+	query := db.Where("user_id=?", uid).Order("modified_date DESC")
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
+	err := query.Find(&ss).Error
 	if err != nil {
 		log.Error(err)
-		return ss, err
+		return ss, 0, err
 	}
 	for i := range ss {
 		err = db.Where("smtp_id=?", ss[i].Id).Find(&ss[i].Headers).Error
 		if err != nil && err != gorm.ErrRecordNotFound {
 			log.Error(err)
-			return ss, err
+			return ss, 0, err
 		}
 	}
-	return ss, nil
+	if !pp.Valid() {
+		total = int64(len(ss))
+	}
+	return ss, total, nil
 }
 
 // GetSMTP returns the SMTP, if it exists, specified by the given id and user_id.

@@ -13,7 +13,8 @@
         :columns="columns"
         :data-source="groups"
         :loading="loading"
-        :pagination="{ pageSize: 10 }"
+        :pagination="pagination"
+        @change="handleTableChange"
         row-key="id"
       >
         <template #bodyCell="{ column, record }">
@@ -102,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import {
   PlusOutlined,
@@ -120,6 +121,13 @@ const saving = ref(false);
 const groups = ref<any[]>([]);
 const modalVisible = ref(false);
 const editingGroup = ref<any>(null);
+const pagination = reactive({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+  showSizeChanger: true,
+  showTotal: (total: number) => `共 ${total} 条`,
+});
 
 const formData = ref({
   name: '',
@@ -147,14 +155,25 @@ onMounted(() => {
 async function loadGroups() {
   loading.value = true;
   try {
-    groups.value = (await getGroups()).sort(
-      (a: any, b: any) => new Date(b.modified_date).getTime() - new Date(a.modified_date).getTime()
-    );
+    const result = await getGroups({ pageNum: pagination.current, pageSize: pagination.pageSize });
+    groups.value = result.data || [];
+    pagination.total = result.total || 0;
   } catch (error) {
     message.error('加载用户组失败');
   } finally {
     loading.value = false;
   }
+}
+
+function handleTableChange(pag: any) {
+  pagination.current = pag.current;
+  pagination.pageSize = pag.pageSize;
+  loadGroups();
+}
+
+function resetPagination() {
+  pagination.current = 1;
+  loadGroups();
 }
 
 function showCreateModal() {
@@ -226,7 +245,7 @@ async function handleSave() {
       message.success('用户组创建成功');
     }
     modalVisible.value = false;
-    loadGroups();
+    resetPagination();
   } catch (error: any) {
     message.error(error?.message || '保存失败');
   } finally {
@@ -287,7 +306,7 @@ function handleDelete(id: number) {
       try {
         await deleteGroup(id);
         message.success('删除成功');
-        loadGroups();
+        resetPagination();
       } catch (error) {
         message.error('删除失败');
       }

@@ -11,7 +11,8 @@
         :columns="columns"
         :data-source="profiles"
         :loading="loading"
-        :pagination="{ pageSize: 10 }"
+        :pagination="pagination"
+        @change="handleTableChange"
         row-key="id"
       >
         <template #bodyCell="{ column, record }">
@@ -109,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons-vue';
 
@@ -125,6 +126,13 @@ const editingProfile = ref<any>(null);
 const testSendVisible = ref(false);
 const testSending = ref(false);
 const testSendForm = ref({ smtp_name: '', to: '' });
+const pagination = reactive({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+  showSizeChanger: true,
+  showTotal: (total: number) => `共 ${total} 条`,
+});
 
 const newHeaderKey = ref('');
 const newHeaderValue = ref('');
@@ -160,14 +168,25 @@ onMounted(() => {
 async function loadProfiles() {
   loading.value = true;
   try {
-    profiles.value = (await getSMTPProfiles()).sort(
-      (a: any, b: any) => new Date(b.modified_date).getTime() - new Date(a.modified_date).getTime()
-    );
+    const result = await getSMTPProfiles({ pageNum: pagination.current, pageSize: pagination.pageSize });
+    profiles.value = result.data || [];
+    pagination.total = result.total || 0;
   } catch (error) {
     message.error('加载发送配置失败');
   } finally {
     loading.value = false;
   }
+}
+
+function handleTableChange(pag: any) {
+  pagination.current = pag.current;
+  pagination.pageSize = pag.pageSize;
+  loadProfiles();
+}
+
+function resetPagination() {
+  pagination.current = 1;
+  loadProfiles();
 }
 
 function showCreateModal() {
@@ -245,7 +264,7 @@ async function handleSave() {
       message.success('发送配置创建成功');
     }
     modalVisible.value = false;
-    loadProfiles();
+    resetPagination();
   } catch (error: any) {
     message.error(error?.response?.data?.message || error?.message || '保存失败');
   } finally {
@@ -286,7 +305,7 @@ function handleDelete(id: number) {
       try {
         await deleteSMTPProfile(id);
         message.success('删除成功');
-        loadProfiles();
+        resetPagination();
       } catch (error) {
         message.error('删除失败');
       }

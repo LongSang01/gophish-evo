@@ -68,12 +68,13 @@ func (ur *userRequest) Validate(existingUser *models.User) error {
 func (as *Server) Users(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
-		us, err := models.GetUsers()
+		pp := parsePagination(r)
+		us, total, err := models.GetUsers(pp)
 		if err != nil {
 			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
 			return
 		}
-		JSONResponse(w, us, http.StatusOK)
+		pagedJSONResponse(w, http.StatusOK, pp, us, total)
 		return
 	case r.Method == "POST":
 		ur := &userRequest{}

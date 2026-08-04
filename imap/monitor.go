@@ -42,7 +42,7 @@ func (im *Monitor) start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			dbusers, err := models.GetUsers() //Slice of all user ids. Each user gets their own IMAP monitor routine.
+			dbusers, _, err := models.GetUsers(models.PageParams{}) //Slice of all user ids. Each user gets their own IMAP monitor routine.
 			if err != nil {
 				log.Error(err)
 				break

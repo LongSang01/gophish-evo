@@ -11,7 +11,8 @@
         :columns="columns"
         :data-source="campaigns"
         :loading="loading"
-        :pagination="{ pageSize: 10 }"
+        :pagination="pagination"
+        @change="handleTableChange"
         row-key="id"
       >
         <template #bodyCell="{ column, record }">
@@ -115,7 +116,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { message, Modal } from 'ant-design-vue';
 import { PlusOutlined } from '@ant-design/icons-vue';
@@ -137,6 +138,13 @@ const smtpProfiles = ref<any[]>([]);
 const pages = ref<any[]>([]);
 const createModalVisible = ref(false);
 const isDuplicate = ref(false);
+const pagination = reactive({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+  showSizeChanger: true,
+  showTotal: (total: number) => `共 ${total} 条`,
+});
 
 const formData = ref({
   name: '',
@@ -192,7 +200,8 @@ const columns = [
 ];
 
 onMounted(async () => {
-  await loadData();
+  await loadCampaigns();
+  await loadDropdownData();
   const duplicateId = route.query.duplicate;
   if (duplicateId) {
     handleDuplicateFromDetail(Number(duplicateId));
@@ -220,29 +229,41 @@ async function handleDuplicateFromDetail(id: number) {
   }
 }
 
-async function loadData() {
+async function loadCampaigns() {
   loading.value = true;
   try {
-    const results = await Promise.allSettled([
-      getCampaignSummaries(),
-      getTemplates(),
-      getGroups(),
-      getSMTPProfiles(),
-      getPages(),
-    ]);
-    const summaryResult = results[0].status === 'fulfilled' ? results[0].value : { campaigns: [] };
-    campaigns.value = (summaryResult.campaigns || []).sort(
-      (a: any, b: any) => new Date(b.created_date || 0).getTime() - new Date(a.created_date || 0).getTime()
-    );
-    templates.value = results[1].status === 'fulfilled' ? results[1].value : [];
-    groups.value = results[2].status === 'fulfilled' ? results[2].value : [];
-    smtpProfiles.value = results[3].status === 'fulfilled' ? results[3].value : [];
-    pages.value = results[4].status === 'fulfilled' ? results[4].value : [];
+    const result = await getCampaignSummaries({ pageNum: pagination.current, pageSize: pagination.pageSize });
+    campaigns.value = result.campaigns || [];
+    pagination.total = result.total || 0;
   } catch (error) {
-    message.error('加载数据失败');
+    message.error('加载活动列表失败');
   } finally {
     loading.value = false;
   }
+}
+
+async function loadDropdownData() {
+  const results = await Promise.allSettled([
+    getTemplates(),
+    getGroups(),
+    getSMTPProfiles(),
+    getPages(),
+  ]);
+  templates.value = results[0].status === 'fulfilled' ? results[0].value : [];
+  groups.value = results[1].status === 'fulfilled' ? results[1].value : [];
+  smtpProfiles.value = results[2].status === 'fulfilled' ? results[2].value : [];
+  pages.value = results[3].status === 'fulfilled' ? results[3].value : [];
+}
+
+function handleTableChange(pag: any) {
+  pagination.current = pag.current;
+  pagination.pageSize = pag.pageSize;
+  loadCampaigns();
+}
+
+function resetPagination() {
+  pagination.current = 1;
+  loadCampaigns();
 }
 
 function showCreateModal() {
@@ -287,7 +308,7 @@ async function handleCreate() {
     await createCampaign(payload);
     message.success(isDuplicate.value ? '活动复制成功' : '活动创建成功');
     createModalVisible.value = false;
-    loadData();
+    resetPagination();
   } catch (error: any) {
     message.error(error?.response?.data?.message || error?.message || '创建失败');
   } finally {
@@ -307,7 +328,7 @@ function handleDelete(id: number) {
       try {
         await deleteCampaign(id);
         message.success('删除成功');
-        loadData();
+        resetPagination();
       } catch (error) {
         message.error('删除失败');
       }

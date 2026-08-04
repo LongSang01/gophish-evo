@@ -4,12 +4,12 @@ enum Api {
   Campaigns = '/campaigns',
 }
 
-export function getCampaigns(): Promise<any[]> {
-  return defHttp.get({ url: `${Api.Campaigns}/` });
+export function getCampaigns(params?: { pageNum?: number; pageSize?: number }): Promise<any> {
+  return defHttp.get({ url: `${Api.Campaigns}/`, params });
 }
 
-export function getCampaignSummaries(): Promise<any> {
-  return defHttp.get({ url: `${Api.Campaigns}/summary` });
+export function getCampaignSummaries(params?: { pageNum?: number; pageSize?: number }): Promise<any> {
+  return defHttp.get({ url: `${Api.Campaigns}/summary`, params });
 }
 
 export function getCampaign(id: number): Promise<any> {
@@ -36,6 +36,6 @@ export function getCampaignSummary(id: number): Promise<any> {
   return defHttp.get({ url: `${Api.Campaigns}/${id}/summary` });
 }
 
-export function getCampaignResults(id: number): Promise<any> {
-  return defHttp.get({ url: `${Api.Campaigns}/${id}/results` });
+export function getCampaignResults(id: number, params?: { pageNum?: number; pageSize?: number }): Promise<any> {
+  return defHttp.get({ url: `${Api.Campaigns}/${id}/results`, params });
 }
