@@ -396,14 +396,19 @@ func GetResultSMTPIdMap(campaignId int64) (map[string]int64, error) {
 
 // LockMailLogs locks or unlocks a slice of maillogs for processing.
 func LockMailLogs(ms []*MailLog, lock bool) error {
-	tx := db.Begin()
+	if len(ms) == 0 {
+		return nil
+	}
+	ids := make([]int64, len(ms))
 	for i := range ms {
 		ms[i].Processing = lock
-		err := tx.Save(ms[i]).Error
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
+		ids[i] = ms[i].Id
+	}
+	tx := db.Begin()
+	err := tx.Model(&MailLog{}).Where("id IN (?)", ids).Update("processing", lock).Error
+	if err != nil {
+		tx.Rollback()
+		return err
 	}
 	tx.Commit()
 	return nil

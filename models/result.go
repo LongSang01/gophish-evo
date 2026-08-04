@@ -5,12 +5,38 @@ import (
 	"encoding/json"
 	"math/big"
 	"net"
+	"sync"
 	"time"
 
 	log "github.com/gophish/gophish/logger"
 	"github.com/jinzhu/gorm"
 	"github.com/oschwald/maxminddb-golang"
 )
+
+// geoDatabase is the global MaxMind GeoIP reader, opened once and reused
+// across all tracking requests. The reader is read-only and safe for
+// concurrent use.
+var (
+	geoDB    *maxminddb.Reader
+	geoDBErr error
+	geoOnce  sync.Once
+)
+
+func getGeoDatabase() (*maxminddb.Reader, error) {
+	geoOnce.Do(func() {
+		geoDB, geoDBErr = maxminddb.Open("db/geolite2-city.mmdb")
+	})
+	return geoDB, geoDBErr
+}
+
+// CloseGeoDatabase releases the global GeoIP database reader. It is intended
+// to be called during graceful shutdown to avoid leaking the underlying
+// file handle.
+func CloseGeoDatabase() {
+	if geoDB != nil {
+		geoDB.Close()
+	}
+}
 
 type mmCity struct {
 	GeoPoint mmGeoPoint `maxminddb:"location"`
@@ -152,12 +178,10 @@ func (r *Result) HandleEmailReport(details EventDetails) error {
 // UpdateGeo updates the latitude and longitude of the result in
 // the database given an IP address
 func (r *Result) UpdateGeo(addr string) error {
-	// Open a connection to the maxmind db
-	mmdb, err := maxminddb.Open("db/geolite2-city.mmdb")
+	mmdb, err := getGeoDatabase()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer mmdb.Close()
 	ip := net.ParseIP(addr)
 	var city mmCity
 	// Get the record

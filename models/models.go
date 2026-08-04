@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strings"
 	"time"
 
 	"bitbucket.org/liamstask/goose/lib/goose"
@@ -80,6 +81,29 @@ func generateSecureKey() string {
 	k := make([]byte, 32)
 	io.ReadFull(rand.Reader, k)
 	return fmt.Sprintf("%x", k)
+}
+
+// getDBConnectionString returns the connection string used to open the
+// database. For on-disk SQLite databases we enable WAL mode, use a normal
+// synchronous mode and configure a busy timeout. WAL mode allows readers to
+// proceed while a writer holds the database, and the busy timeout prevents
+// "database is locked" errors by waiting for the lock to be released instead
+// of failing immediately. In-memory databases (used in tests) don't support
+// WAL, so they are returned untouched.
+func getDBConnectionString(c *config.Config) string {
+	if c.DBName == "mysql" {
+		return c.DBPath
+	}
+	if strings.HasPrefix(c.DBPath, ":memory:") {
+		return c.DBPath
+	}
+	// If the path already contains query parameters (e.g. a user configured
+	// their own DSN), leave it untouched rather than appending a malformed
+	// fragment.
+	if strings.Contains(c.DBPath, "?") {
+		return c.DBPath
+	}
+	return fmt.Sprintf("%s?_journal_mode=WAL&_synchronous=NORMAL&_busy_timeout=5000", c.DBPath)
 }
 
 func chooseDBDriver(name, openStr string) goose.DBDriver {
@@ -173,7 +197,7 @@ func Setup(c *config.Config) error {
 	// Open our database connection
 	i := 0
 	for {
-		db, err = gorm.Open(conf.DBName, conf.DBPath)
+		db, err = gorm.Open(conf.DBName, getDBConnectionString(conf))
 		if err == nil {
 			break
 		}

@@ -2,6 +2,7 @@ package models
 
 import (
 	"errors"
+	"fmt"
 	"net/mail"
 	"time"
 
@@ -188,13 +189,11 @@ func PostGroup(g *Group) error {
 		log.Error(err)
 		return err
 	}
-	for _, t := range g.Targets {
-		err = insertTargetIntoGroup(tx, t, g.Id)
-		if err != nil {
-			tx.Rollback()
-			log.Error(err)
-			return err
-		}
+	err = insertTargetsIntoGroup(tx, g.Targets, g.Id)
+	if err != nil {
+		tx.Rollback()
+		log.Error(err)
+		return err
 	}
 	err = tx.Commit().Error
 	if err != nil {
@@ -246,6 +245,7 @@ func PutGroup(g *Group) error {
 		}
 	}
 	// Add any targets that are not in the database yet.
+	var newTargets []Target
 	for _, nt := range g.Targets {
 		// If the target already exists in the database, we should just update
 		// the record with the latest information.
@@ -260,7 +260,10 @@ func PutGroup(g *Group) error {
 			continue
 		}
 		// Otherwise, add target if not in database
-		err = insertTargetIntoGroup(tx, nt, g.Id)
+		newTargets = append(newTargets, nt)
+	}
+	if len(newTargets) > 0 {
+		err = insertTargetsIntoGroup(tx, newTargets, g.Id)
 		if err != nil {
 			log.Error(err)
 			tx.Rollback()
@@ -297,30 +300,174 @@ func DeleteGroup(g *Group) error {
 	return err
 }
 
-func insertTargetIntoGroup(tx *gorm.DB, t Target, gid int64) error {
-	if _, err := mail.ParseAddress(t.Email); err != nil {
-		log.WithFields(logrus.Fields{
-			"email": t.Email,
-		}).Error("Invalid email")
-		return err
+// insertTargetsIntoGroup imports the given targets into the group, preserving
+// the previous FirstOrCreate semantics (a target is only reused if the email,
+// full name and position all match). It replaces one round-trip per target with
+// a few batched queries: a single lookup of existing targets, one (chunked)
+// INSERT for new targets, and one (chunked) INSERT for the group mappings.
+func insertTargetsIntoGroup(tx *gorm.DB, targets []Target, gid int64) error {
+	if len(targets) == 0 {
+		return nil
 	}
-	err := tx.Where(t).FirstOrCreate(&t).Error
-	if err != nil {
-		log.WithFields(logrus.Fields{
-			"email": t.Email,
-		}).Error(err)
-		return err
+	type rec struct {
+		Id       int64
+		Email    string
+		FullName string
+		Position string
 	}
-	err = tx.Save(&GroupTarget{GroupId: gid, TargetId: t.Id}).Error
-	if err != nil {
-		log.Error(err)
-		return err
+	keyOf := func(email, fullName, position string) string {
+		return email + "\x00" + fullName + "\x00" + position
 	}
-	if err != nil {
-		log.WithFields(logrus.Fields{
-			"email": t.Email,
-		}).Error("Error adding many-many mapping")
-		return err
+	// Validate every email up front, matching the previous behavior of stopping
+	// on the first invalid address (which aborts the whole transaction).
+	emails := make(map[string]struct{}, len(targets))
+	for _, t := range targets {
+		if _, err := mail.ParseAddress(t.Email); err != nil {
+			log.WithFields(logrus.Fields{"email": t.Email}).Error("Invalid email")
+			return err
+		}
+		emails[t.Email] = struct{}{}
+	}
+	emailList := make([]string, 0, len(emails))
+	for e := range emails {
+		emailList = append(emailList, e)
+	}
+	// Existing targets keyed by (email, full name, position). If multiple rows
+	// match, keep the lowest id to stay consistent with gorm's First() (lowest
+	// primary key).
+	existing := make(map[string]int64)
+	existingRows := []rec{}
+	for _, chunk := range chunkStrings(emailList) {
+		rows := []rec{}
+		if err := tx.Table("targets").
+			Select("id, email, full_name, position").
+			Where("email IN (?)", chunk).Scan(&rows).Error; err != nil {
+			log.Error(err)
+			return err
+		}
+		existingRows = append(existingRows, rows...)
+	}
+	for _, r := range existingRows {
+		k := keyOf(r.Email, r.FullName, r.Position)
+		if id, ok := existing[k]; !ok || r.Id < id {
+			existing[k] = r.Id
+		}
+	}
+	// Determine which targets need to be newly created.
+	newByKey := map[string]Target{}
+	for _, t := range targets {
+		k := keyOf(t.Email, t.FullName, t.Position)
+		if _, ok := existing[k]; ok {
+			continue
+		}
+		newByKey[k] = t
+	}
+	// Insert the new targets, then read back their assigned ids.
+	if len(newByKey) > 0 {
+		if err := insertTargetsBulk(tx, newByKey); err != nil {
+			return err
+		}
+		newEmails := make([]string, 0, len(newByKey))
+		for _, t := range newByKey {
+			newEmails = append(newEmails, t.Email)
+		}
+		for _, chunk := range chunkStrings(newEmails) {
+			resolved := []rec{}
+			if err := tx.Table("targets").
+				Select("id, email, full_name, position").
+				Where("email IN (?)", chunk).Scan(&resolved).Error; err != nil {
+				log.Error(err)
+				return err
+			}
+			for _, r := range resolved {
+				k := keyOf(r.Email, r.FullName, r.Position)
+				if _, ok := newByKey[k]; ok {
+					existing[k] = r.Id
+				}
+			}
+		}
+	}
+	// Build the group_targets mappings, one per input target (duplicates produce
+	// duplicate mappings, matching the previous per-target behavior).
+	mapping := make([]int64, 0, len(targets))
+	for _, t := range targets {
+		k := keyOf(t.Email, t.FullName, t.Position)
+		id, ok := existing[k]
+		if !ok {
+			return fmt.Errorf("target %q missing after import", t.Email)
+		}
+		mapping = append(mapping, id)
+	}
+	return insertGroupTargetsBulk(tx, gid, mapping)
+}
+
+// chunkStrings splits a slice of values into chunks that stay well below
+// SQLite's per-statement bind variable limit (999 for SQLite 3.31).
+func chunkStrings(vals []string) [][]string {
+	const maxVars = 800
+	chunks := [][]string{}
+	for start := 0; start < len(vals); start += maxVars {
+		end := start + maxVars
+		if end > len(vals) {
+			end = len(vals)
+		}
+		chunks = append(chunks, vals[start:end])
+	}
+	return chunks
+}
+
+// insertTargetsBulk inserts the newly created targets in chunks, keeping the
+// number of bind variables within SQLite's per-statement limit.
+func insertTargetsBulk(tx *gorm.DB, byKey map[string]Target) error {
+	keys := make([]string, 0, len(byKey))
+	for k := range byKey {
+		keys = append(keys, k)
+	}
+	const batchSize = 300
+	for start := 0; start < len(keys); start += batchSize {
+		end := start + batchSize
+		if end > len(keys) {
+			end = len(keys)
+		}
+		sql := "INSERT INTO targets (email, full_name, position) VALUES"
+		var args []interface{}
+		for i := start; i < end; i++ {
+			if i > start {
+				sql += ","
+			}
+			sql += " (?,?,?)"
+			t := byKey[keys[i]]
+			args = append(args, t.Email, t.FullName, t.Position)
+		}
+		if err := tx.Exec(sql, args...).Error; err != nil {
+			log.Error(err)
+			return err
+		}
+	}
+	return nil
+}
+
+// insertGroupTargetsBulk inserts the many-to-many group mappings in chunks.
+func insertGroupTargetsBulk(tx *gorm.DB, gid int64, targetIds []int64) error {
+	const batchSize = 300
+	for start := 0; start < len(targetIds); start += batchSize {
+		end := start + batchSize
+		if end > len(targetIds) {
+			end = len(targetIds)
+		}
+		sql := "INSERT INTO group_targets (group_id, target_id) VALUES"
+		var args []interface{}
+		for i := start; i < end; i++ {
+			if i > start {
+				sql += ","
+			}
+			sql += " (?,?)"
+			args = append(args, gid, targetIds[i])
+		}
+		if err := tx.Exec(sql, args...).Error; err != nil {
+			log.Error(err)
+			return err
+		}
 	}
 	return nil
 }

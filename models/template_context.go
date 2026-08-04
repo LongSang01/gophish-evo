@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"text/template"
 
 	log "github.com/gophish/gophish/logger"
@@ -129,15 +130,26 @@ func NewPhishingTemplateContext(ctx TemplateContext, r BaseRecipient, rid string
 	}, nil
 }
 
+// templateCache caches parsed templates keyed by the template text itself
+// rather than by a template ID. Keying on content means edits to a template or
+// page body immediately produce a new cache entry, so rendered output is
+// always based on the current content. The parsed templates are read-only and
+// safe for concurrent use.
+var templateCache sync.Map
+
 // ExecuteTemplate creates a templated string based on the provided
 // template body and data.
 func ExecuteTemplate(text string, data interface{}) (string, error) {
-	buff := bytes.Buffer{}
-	tmpl, err := template.New("template").Parse(text)
-	if err != nil {
-		return buff.String(), err
+	tmplIface, ok := templateCache.Load(text)
+	if !ok {
+		tmpl, err := template.New("template").Parse(text)
+		if err != nil {
+			return "", err
+		}
+		tmplIface, _ = templateCache.LoadOrStore(text, tmpl)
 	}
-	err = tmpl.Execute(&buff, data)
+	buff := bytes.Buffer{}
+	err := tmplIface.(*template.Template).Execute(&buff, data)
 	return buff.String(), err
 }
 

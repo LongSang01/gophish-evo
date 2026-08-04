@@ -157,6 +157,34 @@ func (c *Campaign) UpdateStatus(s string) error {
 	return db.Table("campaigns").Where("id=?", c.Id).Update("status", s).Error
 }
 
+// GetCampaignForContext returns a Campaign containing only the fields needed
+// to handle phishing server requests (tracking, reporting and landing page
+// rendering): status, page id, user id, the base URL and the primary SMTP
+// "From" address. It deliberately avoids the heavy getDetails() query (which
+// loads results, events, groups, targets, attachments and stats) that would
+// otherwise run for every tracking or landing page request.
+func GetCampaignForContext(id int64, uid int64) (Campaign, error) {
+	c := Campaign{}
+	err := db.Table("campaigns").
+		Select("id, user_id, page_id, status, url, smtp_id").
+		Where("id=? AND user_id=?", id, uid).Find(&c).Error
+	if err != nil {
+		return c, err
+	}
+	// Load the primary SMTP so that getFromAddress() returns the configured
+	// "From" address used when rendering the landing page. This mirrors the
+	// behavior of GetCampaign's getDetails().
+	err = db.Table("smtp").Where("id=?", c.SMTPId).Find(&c.SMTP).Error
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return c, err
+		}
+		c.SMTP = SMTP{Name: "[Deleted]"}
+		log.Warnf("%s: sending profile not found for campaign", err)
+	}
+	return c, nil
+}
+
 // AddEvent creates a new campaign event in the database
 func AddEvent(e *Event, campaignID int64) error {
 	e.CampaignId = campaignID
@@ -636,10 +664,12 @@ func PostCampaign(c *Campaign, uid int64) error {
 	basePerSMTP := realTotal / numSMTPs
 	remainder := realTotal % numSMTPs
 
-	// Step 2: insert results with interval-based even SMTP distribution.
+	// Step 2: build the results and maillogs for every recipient, then insert
+	// them in bulk instead of one round-trip per recipient.
 	// First `remainder` profiles each get (basePerSMTP+1) recipients,
 	// the remaining profiles each get basePerSMTP recipients.
-	tx := db.Begin()
+	results := make([]Result, 0, realTotal)
+	maillogs := make([]MailLog, 0, realTotal)
 	for recipientIndex, t := range uniqueTargets {
 		sendDate := c.generateSendDate(recipientIndex, realTotal)
 		var smtpIndex int
@@ -652,7 +682,7 @@ func PostCampaign(c *Campaign, uid int64) error {
 			smtpIndex = remainder + (recipientIndex-remainder*(basePerSMTP+1))/basePerSMTP
 		}
 		assignedSMTP := resolvedSMTPs[smtpIndex]
-		r := &Result{
+		r := Result{
 			BaseRecipient: BaseRecipient{
 				Email:    t.Email,
 				Position: t.Position,
@@ -666,48 +696,157 @@ func PostCampaign(c *Campaign, uid int64) error {
 			Reported:     false,
 			ModifiedDate: c.CreatedDate,
 		}
-		err = r.GenerateId(tx)
-		if err != nil {
-			log.Error(err)
-			tx.Rollback()
-			return err
-		}
 		processing := false
 		if r.SendDate.Before(c.CreatedDate) || r.SendDate.Equal(c.CreatedDate) {
 			r.Status = StatusSending
 			processing = true
 		}
-		err = tx.Save(r).Error
-		if err != nil {
-			log.WithFields(logrus.Fields{
-				"email": t.Email,
-			}).Errorf("error creating result: %v", err)
-			tx.Rollback()
-			return err
-		}
-		c.Results = append(c.Results, *r)
-		log.WithFields(logrus.Fields{
-			"email":     r.Email,
-			"send_date": sendDate,
-			"smtp_id":   assignedSMTP.Id,
-		}).Debug("creating maillog")
-		m := &MailLog{
+		results = append(results, r)
+		maillogs = append(maillogs, MailLog{
 			UserId:     c.UserId,
 			CampaignId: c.Id,
-			RId:        r.RId,
 			SendDate:   sendDate,
 			Processing: processing,
-		}
-		err = tx.Save(m).Error
+		})
+	}
+	tx := db.Begin()
+	// Generate unique result ids for the whole batch up front.
+	rIds, err := generateUniqueResultIds(len(results), tx)
+	if err != nil {
+		log.Error(err)
+		tx.Rollback()
+		return err
+	}
+	for i := range results {
+		results[i].RId = rIds[i]
+		maillogs[i].RId = rIds[i]
+	}
+	c.Results = results
+	if err = insertResultsBulk(tx, results); err != nil {
+		log.Error(err)
+		tx.Rollback()
+		return err
+	}
+	if err = insertMailLogsBulk(tx, maillogs); err != nil {
+		log.Error(err)
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit().Error
+}
+
+// generateUniqueResultIds generates n unique result ids, checking for
+// collisions both against the database and within the generated batch using a
+// single batched query per round instead of one query per id.
+func generateUniqueResultIds(n int, tx *gorm.DB) ([]string, error) {
+	ids := make([]string, n)
+	for i := range ids {
+		id, err := generateResultId()
 		if err != nil {
-			log.WithFields(logrus.Fields{
-				"email": t.Email,
-			}).Errorf("error creating maillog entry: %v", err)
-			tx.Rollback()
+			return nil, err
+		}
+		ids[i] = id
+	}
+	for attempt := 0; attempt < 8; attempt++ {
+		// Ids that already exist in the database.
+		blocked := make(map[string]bool, n)
+		for _, chunk := range chunkStrings(ids) {
+			var existing []string
+			if err := tx.Table("results").Where("r_id IN (?)", chunk).Pluck("r_id", &existing).Error; err != nil {
+				return nil, err
+			}
+			for _, e := range existing {
+				blocked[e] = true
+			}
+		}
+		// Duplicates within the generated batch.
+		seen := make(map[string]bool, n)
+		for _, id := range ids {
+			if seen[id] {
+				blocked[id] = true
+			}
+			seen[id] = true
+		}
+		needRegen := false
+		for i := range ids {
+			if !blocked[ids[i]] {
+				continue
+			}
+			needRegen = true
+			for {
+				id, err := generateResultId()
+				if err != nil {
+					return nil, err
+				}
+				if !seen[id] && !blocked[id] {
+					ids[i] = id
+					seen[id] = true
+					break
+				}
+			}
+		}
+		if !needRegen {
+			return ids, nil
+		}
+	}
+	return ids, nil
+}
+
+// insertResultsBulk inserts the results in chunks, keeping the number of bind
+// variables within SQLite's per-statement limit.
+func insertResultsBulk(tx *gorm.DB, results []Result) error {
+	if len(results) == 0 {
+		return nil
+	}
+	const batchSize = 50
+	for start := 0; start < len(results); start += batchSize {
+		end := start + batchSize
+		if end > len(results) {
+			end = len(results)
+		}
+		sql := "INSERT INTO results (campaign_id, user_id, r_id, email, full_name, position, status, ip, latitude, longitude, send_date, reported, modified_date, smtp_id) VALUES"
+		var args []interface{}
+		for i := start; i < end; i++ {
+			if i > start {
+				sql += ","
+			}
+			sql += " (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+			r := results[i]
+			args = append(args, r.CampaignId, r.UserId, r.RId, r.Email, r.FullName, r.Position, r.Status, r.IP, r.Latitude, r.Longitude, r.SendDate, r.Reported, r.ModifiedDate, r.SMTPId)
+		}
+		if err := tx.Exec(sql, args...).Error; err != nil {
 			return err
 		}
 	}
-	return tx.Commit().Error
+	return nil
+}
+
+// insertMailLogsBulk inserts the maillogs in chunks.
+func insertMailLogsBulk(tx *gorm.DB, maillogs []MailLog) error {
+	if len(maillogs) == 0 {
+		return nil
+	}
+	const batchSize = 100
+	for start := 0; start < len(maillogs); start += batchSize {
+		end := start + batchSize
+		if end > len(maillogs) {
+			end = len(maillogs)
+		}
+		sql := "INSERT INTO mail_logs (campaign_id, user_id, send_date, send_attempt, r_id, processing) VALUES"
+		var args []interface{}
+		for i := start; i < end; i++ {
+			if i > start {
+				sql += ","
+			}
+			sql += " (?,?,?,?,?,?)"
+			m := maillogs[i]
+			args = append(args, m.CampaignId, m.UserId, m.SendDate, m.SendAttempt, m.RId, m.Processing)
+		}
+		if err := tx.Exec(sql, args...).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // DeleteCampaign deletes the specified campaign
