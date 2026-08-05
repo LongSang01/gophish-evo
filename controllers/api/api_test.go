@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -1133,5 +1134,427 @@ func TestGetSMTPNotFound(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ==================== Campaign Single Get/Delete Tests ====================
+
+func TestGetCampaign(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	c := models.Campaign{Name: "Get Test"}
+	c.UserId = 1
+	c.Template = models.Template{Name: "Test Template"}
+	c.Page = models.Page{Name: "Test Page"}
+	c.SMTP = models.SMTP{Name: "Test SMTP"}
+	c.Groups = []models.Group{{Name: "Test Group"}}
+	models.PostCampaign(&c, 1)
+
+	url := fmt.Sprintf("/api/campaigns/%d", c.Id)
+	r := httptest.NewRequest(http.MethodGet, url, nil)
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
+	}
+	got := models.Campaign{}
+	json.NewDecoder(w.Body).Decode(&got)
+	if got.Name != "Get Test" {
+		t.Fatalf("expected name 'Get Test' got %s", got.Name)
+	}
+}
+
+func TestDeleteCampaign(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	c := models.Campaign{Name: "Delete Test"}
+	c.UserId = 1
+	c.Template = models.Template{Name: "Test Template"}
+	c.Page = models.Page{Name: "Test Page"}
+	c.SMTP = models.SMTP{Name: "Test SMTP"}
+	c.Groups = []models.Group{{Name: "Test Group"}}
+	models.PostCampaign(&c, 1)
+
+	url := fmt.Sprintf("/api/campaigns/%d", c.Id)
+	r := httptest.NewRequest(http.MethodDelete, url, nil)
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
+	}
+	resp := models.Response{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if !resp.Success {
+		t.Fatalf("expected success=true, got message=%s", resp.Message)
+	}
+}
+
+func TestGetCampaignResults(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	c := models.Campaign{Name: "Results Test"}
+	c.UserId = 1
+	c.Template = models.Template{Name: "Test Template"}
+	c.Page = models.Page{Name: "Test Page"}
+	c.SMTP = models.SMTP{Name: "Test SMTP"}
+	c.Groups = []models.Group{{Name: "Test Group"}}
+	models.PostCampaign(&c, 1)
+
+	url := fmt.Sprintf("/api/campaigns/%d/results", c.Id)
+	r := httptest.NewRequest(http.MethodGet, url, nil)
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGetCampaignSummary(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	c := models.Campaign{Name: "Summary Detail Test"}
+	c.UserId = 1
+	c.Template = models.Template{Name: "Test Template"}
+	c.Page = models.Page{Name: "Test Page"}
+	c.SMTP = models.SMTP{Name: "Test SMTP"}
+	c.Groups = []models.Group{{Name: "Test Group"}}
+	models.PostCampaign(&c, 1)
+
+	url := fmt.Sprintf("/api/campaigns/%d/summary", c.Id)
+	r := httptest.NewRequest(http.MethodGet, url, nil)
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
+	}
+	cs := models.CampaignSummary{}
+	json.NewDecoder(w.Body).Decode(&cs)
+	if cs.Name != "Summary Detail Test" {
+		t.Fatalf("expected name 'Summary Detail Test' got %s", cs.Name)
+	}
+}
+
+func TestGetCampaignSummaryNotFound(t *testing.T) {
+	tc := setupTest(t)
+
+	r := httptest.NewRequest(http.MethodGet, "/api/campaigns/999/summary", nil)
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ==================== Single Resource Get Tests ====================
+
+func TestGetSingleGroup(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	r := httptest.NewRequest(http.MethodGet, "/api/groups/1", nil)
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
+	}
+	g := models.Group{}
+	json.NewDecoder(w.Body).Decode(&g)
+	if g.Name != "Test Group" {
+		t.Fatalf("expected name 'Test Group' got %s", g.Name)
+	}
+}
+
+func TestGetSingleTemplate(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	r := httptest.NewRequest(http.MethodGet, "/api/templates/1", nil)
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
+	}
+	tmpl := models.Template{}
+	json.NewDecoder(w.Body).Decode(&tmpl)
+	if tmpl.Name != "Test Template" {
+		t.Fatalf("expected name 'Test Template' got %s", tmpl.Name)
+	}
+}
+
+func TestGetSinglePage(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	r := httptest.NewRequest(http.MethodGet, "/api/pages/1", nil)
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
+	}
+	p := models.Page{}
+	json.NewDecoder(w.Body).Decode(&p)
+	if p.Name != "Test Page" {
+		t.Fatalf("expected name 'Test Page' got %s", p.Name)
+	}
+}
+
+func TestGetSingleSMTP(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	r := httptest.NewRequest(http.MethodGet, "/api/smtp/1", nil)
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
+	}
+	s := models.SMTP{}
+	json.NewDecoder(w.Body).Decode(&s)
+	if s.Name != "Test SMTP" {
+		t.Fatalf("expected name 'Test SMTP' got %s", s.Name)
+	}
+}
+
+// ==================== Webhook NotFound ====================
+
+func TestGetWebhookNotFound(t *testing.T) {
+	tc := setupTest(t)
+
+	r := httptest.NewRequest(http.MethodGet, "/api/webhooks/999", nil)
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ==================== IMAP POST Test ====================
+
+func TestPostIMAP(t *testing.T) {
+	tc := setupTest(t)
+
+	body := `{"enabled":true,"host":"localhost","port":"993","username":"user","password":"pass","tls":true,"folder":"INBOX","imap_freq":"120"}`
+	r := httptest.NewRequest(http.MethodPost, "/api/imap/", bytes.NewBufferString(body))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201 got %d: %s", w.Code, w.Body.String())
+	}
+	resp := models.Response{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if !resp.Success {
+		t.Fatalf("expected success=true, got message=%s", resp.Message)
+	}
+}
+
+// ==================== Import Group Test ====================
+
+func TestImportGroup(t *testing.T) {
+	tc := setupTest(t)
+
+	// Build a multipart CSV file upload (same format as util_test.go)
+	body := new(bytes.Buffer)
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("files[]", "group.csv")
+	if err != nil {
+		t.Fatalf("error creating form file: %v", err)
+	}
+	csvHeader := "Full Name,Email\n"
+	part.Write([]byte(csvHeader))
+	part.Write([]byte("User One,user1@example.com\n"))
+	part.Write([]byte("User Two,user2@example.com\n"))
+	writer.Close()
+
+	r := httptest.NewRequest(http.MethodPost, "/api/import/group", body)
+	r.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+	tc.apiServer.ImportGroup(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
+	}
+	ts := []models.Target{}
+	json.NewDecoder(w.Body).Decode(&ts)
+	if len(ts) < 2 {
+		t.Fatalf("expected at least 2 targets, got %d", len(ts))
+	}
+}
+
+// ==================== SendTestEmail Wrong Method ====================
+
+func TestSendTestEmailWrongMethod(t *testing.T) {
+	tc := setupTest(t)
+
+	r := httptest.NewRequest(http.MethodGet, "/api/util/send_test_email", nil)
+	r = ctx.Set(r, "user_id", int64(1))
+	w := httptest.NewRecorder()
+	tc.apiServer.SendTestEmail(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 got %d", w.Code)
+	}
+}
+
+// ==================== Campaign Launch Wrong State ====================
+
+func TestCampaignLaunchWrongState(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	c := models.Campaign{Name: "Wrong State Test"}
+	c.UserId = 1
+	c.Template = models.Template{Name: "Test Template"}
+	c.Page = models.Page{Name: "Test Page"}
+	c.SMTP = models.SMTP{Name: "Test SMTP"}
+	c.Groups = []models.Group{{Name: "Test Group"}}
+	models.PostCampaign(&c, 1)
+	// Campaign is in "in_progress" state by default, not launchable
+
+	url := fmt.Sprintf("/api/campaigns/%d/launch", c.Id)
+	r := httptest.NewRequest(http.MethodPost, url, nil)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCampaignLaunchWrongMethod(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	c := models.Campaign{Name: "Wrong Method Launch"}
+	c.UserId = 1
+	c.Template = models.Template{Name: "Test Template"}
+	c.Page = models.Page{Name: "Test Page"}
+	c.SMTP = models.SMTP{Name: "Test SMTP"}
+	c.Groups = []models.Group{{Name: "Test Group"}}
+	models.PostCampaign(&c, 1)
+
+	url := fmt.Sprintf("/api/campaigns/%d/launch", c.Id)
+	r := httptest.NewRequest(http.MethodGet, url, nil)
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ==================== Group ID Mismatch ====================
+
+func TestModifyGroupIdMismatch(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	body := `{"id":999,"name":"Mismatch Group","targets":[{"email":"test@example.com"}]}`
+	url := "/api/groups/1"
+	r := httptest.NewRequest(http.MethodPut, url, bytes.NewBufferString(body))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestModifyTemplateIdMismatch(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	body := `{"id":999,"name":"Mismatch Template","subject":"S","text":"T"}`
+	url := "/api/templates/1"
+	r := httptest.NewRequest(http.MethodPut, url, bytes.NewBufferString(body))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestModifyPageIdMismatch(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	body := `{"id":999,"name":"Mismatch Page","html":"<html></html>"}`
+	url := "/api/pages/1"
+	r := httptest.NewRequest(http.MethodPut, url, bytes.NewBufferString(body))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestModifySMTPIdMismatch(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	body := `{"id":999,"name":"Mismatch SMTP","host":"test.com:25","from_address":"t@t.com"}`
+	url := "/api/smtp/1"
+	r := httptest.NewRequest(http.MethodPut, url, bytes.NewBufferString(body))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
+	w := httptest.NewRecorder()
+	tc.apiServer.ServeHTTP(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ==================== Reset Wrong Method ====================
+
+func TestResetAPIKeyWrongMethod(t *testing.T) {
+	tc := setupTest(t)
+
+	r := httptest.NewRequest(http.MethodGet, "/api/reset", nil)
+	r = ctx.Set(r, "user", tc.admin)
+	w := httptest.NewRecorder()
+	tc.apiServer.Reset(w, r)
+
+	// Reset only handles POST; GET should produce a 200 with empty body (default behavior)
+	// since the handler only has a POST case and falls through
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", w.Code)
 	}
 }
