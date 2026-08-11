@@ -11,7 +11,7 @@
           </a-button>
         </a-space>
       </template>
-      
+
       <a-table
         :columns="columns"
         :data-source="templates"
@@ -29,9 +29,15 @@
           </template>
           <template v-if="column.key === 'action'">
             <a-space>
-              <a-button size="small" @click="showEditModal(record)">编辑</a-button>
-              <a-button size="small" @click="handleDuplicate(record)">复制</a-button>
-              <a-button size="small" danger @click="handleDelete(record.id)">删除</a-button>
+              <a-button size="small" @click="showEditModal(record)"
+                >编辑</a-button
+              >
+              <a-button size="small" @click="handleDuplicate(record)"
+                >复制</a-button
+              >
+              <a-button size="small" danger @click="handleDelete(record.id)"
+                >删除</a-button
+              >
             </a-space>
           </template>
         </template>
@@ -51,10 +57,16 @@
           <a-input v-model:value="formData.name" placeholder="输入模板名称" />
         </a-form-item>
         <a-form-item label="邮件主题" required>
-          <a-input v-model:value="formData.subject" placeholder="输入邮件主题" />
+          <a-input
+            v-model:value="formData.subject"
+            placeholder="输入邮件主题"
+          />
         </a-form-item>
         <a-form-item label="发件人">
-          <a-input v-model:value="formData.envelope_sender" placeholder="发件人名称或地址" />
+          <a-input
+            v-model:value="formData.envelope_sender"
+            placeholder="发件人名称或地址"
+          />
         </a-form-item>
         <a-form-item label="邮件内容 (HTML)">
           <div class="editor-preview-wrapper">
@@ -62,9 +74,11 @@
               <div class="pane-header">
                 <span>代码编辑</span>
                 <a-space>
-                  <a-checkbox v-model:checked="formData.useTracker">添加追踪图片</a-checkbox>
+                  <a-checkbox v-model:checked="formData.useTracker"
+                    >添加追踪图片</a-checkbox
+                  >
                   <a-button size="small" @click="togglePreview">
-                    {{ showPreview ? '隐藏预览' : '显示预览' }}
+                    {{ showPreview ? "隐藏预览" : "显示预览" }}
                   </a-button>
                 </a-space>
               </div>
@@ -91,7 +105,11 @@
           </div>
         </a-form-item>
         <a-form-item label="纯文本内容">
-          <a-textarea v-model:value="formData.text" :rows="4" placeholder="纯文本版本（可选）" />
+          <a-textarea
+            v-model:value="formData.text"
+            :rows="4"
+            placeholder="纯文本版本（可选）"
+          />
         </a-form-item>
         <a-form-item label="附件">
           <a-table
@@ -103,13 +121,25 @@
           >
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'name'">
-                <a-input v-model:value="record.name" size="small" placeholder="文件名" />
+                <a-input
+                  v-model:value="record.name"
+                  size="small"
+                  placeholder="文件名"
+                />
               </template>
               <template v-if="column.key === 'type'">
-                <a-input v-model:value="record.type" size="small" placeholder="MIME类型" />
+                <a-input
+                  v-model:value="record.type"
+                  size="small"
+                  placeholder="MIME类型"
+                />
               </template>
               <template v-if="column.key === 'action'">
-                <a-button size="small" danger @click="formData.attachments.splice(index, 1)">
+                <a-button
+                  size="small"
+                  danger
+                  @click="formData.attachments.splice(index, 1)"
+                >
                   <DeleteOutlined />
                 </a-button>
               </template>
@@ -127,9 +157,7 @@
         </a-form-item>
         <a-form-item>
           <a-space>
-            <a-button @click="handlePreview">
-              <EyeOutlined /> 预览
-            </a-button>
+            <a-button @click="handlePreview"> <EyeOutlined /> 预览 </a-button>
             <a-button @click="handleTestSend">
               <SendOutlined /> 发送测试
             </a-button>
@@ -160,14 +188,24 @@
     >
       <a-form layout="vertical">
         <a-form-item label="发送配置" required>
-          <a-select v-model:value="testSendForm.smtp_name" placeholder="选择SMTP发送配置">
-            <a-select-option v-for="s in smtpProfiles" :key="s.id" :value="s.name">
+          <a-select
+            v-model:value="testSendForm.smtp_name"
+            placeholder="选择SMTP发送配置"
+          >
+            <a-select-option
+              v-for="s in smtpProfiles"
+              :key="s.id"
+              :value="s.name"
+            >
               {{ s.name }}
             </a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="收件人邮箱" required>
-          <a-input v-model:value="testSendForm.to" placeholder="输入测试收件人邮箱" />
+          <a-input
+            v-model:value="testSendForm.to"
+            placeholder="输入测试收件人邮箱"
+          />
         </a-form-item>
       </a-form>
     </a-modal>
@@ -181,11 +219,15 @@
     >
       <a-form layout="vertical">
         <a-form-item label="邮件原始内容" required>
-          <a-textarea v-model:value="importEmailContent" :rows="12" placeholder="粘贴邮件原始内容（包含邮件头）..." />
+          <a-textarea
+            v-model:value="importEmailContent"
+            :rows="12"
+            placeholder="粘贴邮件原始内容（包含邮件头）..."
+          />
         </a-form-item>
         <a-form-item>
           <a-checkbox v-model:checked="importEmailConvertLinks">
-             将链接转换为 <code>{{ convertLinksPlaceholder }}</code>
+            将链接转换为 <code>{{ convertLinksPlaceholder }}</code>
           </a-checkbox>
         </a-form-item>
       </a-form>
@@ -194,25 +236,43 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
-import { message, Modal } from 'ant-design-vue';
-import { PlusOutlined, EyeOutlined, SendOutlined, ImportOutlined, UploadOutlined, DeleteOutlined } from '@ant-design/icons-vue';
+import { ref, reactive, onMounted } from "vue";
+import { message, Modal } from "ant-design-vue";
+import {
+  PlusOutlined,
+  EyeOutlined,
+  SendOutlined,
+  ImportOutlined,
+  UploadOutlined,
+  DeleteOutlined,
+} from "@ant-design/icons-vue";
 
 let attachmentUid = 0;
-import { Codemirror } from 'vue-codemirror';
-import { html } from '@codemirror/lang-html';
-import { oneDark } from '@codemirror/theme-one-dark';
-import { autocompletion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
-import { getTemplates, createTemplate, updateTemplate, deleteTemplate, sendTestEmail, importEmail } from '@/api/templates';
-import { getSMTPProfiles } from '@/api/smtp';
-import { formatDate } from '@/utils/format';
+import { Codemirror } from "vue-codemirror";
+import { html } from "@codemirror/lang-html";
+import { oneDark } from "@codemirror/theme-one-dark";
+import {
+  autocompletion,
+  type CompletionContext,
+  type CompletionResult,
+} from "@codemirror/autocomplete";
+import {
+  getTemplates,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+  sendTestEmail,
+  importEmail,
+} from "@/api/templates";
+import { getSMTPProfiles } from "@/api/smtp";
+import { formatDate } from "@/utils/format";
 
 const loading = ref(false);
 const saving = ref(false);
 const templates = ref<any[]>([]);
 const modalVisible = ref(false);
 const previewVisible = ref(false);
-const previewHtml = ref('');
+const previewHtml = ref("");
 const editingTemplate = ref<any>(null);
 const editorKey = ref(0);
 const pagination = reactive({
@@ -224,54 +284,68 @@ const pagination = reactive({
 });
 
 const attachmentColumns = [
-  { title: '文件名', key: 'name' },
-  { title: 'MIME类型', key: 'type' },
-  { title: '操作', key: 'action', width: 60 },
+  { title: "文件名", key: "name" },
+  { title: "MIME类型", key: "type" },
+  { title: "操作", key: "action", width: 60 },
 ];
 
 const smtpProfiles = ref<any[]>([]);
 const testSendVisible = ref(false);
 const testSending = ref(false);
-const testSendForm = ref({ smtp_name: '', to: '' });
+const testSendForm = ref({ smtp_name: "", to: "" });
 
 const importEmailVisible = ref(false);
-const importEmailContent = ref('');
+const importEmailContent = ref("");
 const importEmailConvertLinks = ref(true);
 const importingEmail = ref(false);
-const convertLinksPlaceholder = '{{.URL}}';
+const convertLinksPlaceholder = "{{.URL}}";
 
 const formData = ref({
-  name: '',
-  subject: '',
-  envelope_sender: '',
-  html: '',
-  text: '',
+  name: "",
+  subject: "",
+  envelope_sender: "",
+  html: "",
+  text: "",
   useTracker: true,
   attachments: [] as any[],
 });
 
 // GoPhish template variables with descriptions
 const templateVariables = [
-  { label: '.URL', detail: '钓鱼链接', info: '包含收件人唯一ID的钓鱼URL' },
-  { label: '.RId', detail: '收件人ID', info: '收件人的唯一标识符' },
-  { label: '.Email', detail: '收件人邮箱', info: '收件人的邮箱地址' },
-  { label: '.FullName', detail: '收件人姓名', info: '收件人的全名' },
-  { label: '.Position', detail: '职位', info: '收件人的职位' },
-  { label: '.From', detail: '发件人', info: '发件人邮箱地址' },
-  { label: '.Tracker', detail: '追踪图片', info: '用于邮件打开追踪的隐藏图片标签' },
-  { label: '.TrackingURL', detail: '追踪URL', info: '追踪处理器的URL地址' },
-  { label: '.BaseURL', detail: '基础URL', info: '去掉路径和rid参数的基础URL，适合链接静态文件' },
-  { label: '.QRCode', detail: '二维码', info: '钓鱼链接的二维码图片 (Base64)' },
+  { label: ".URL", detail: "钓鱼链接", info: "带有追踪ID的完整钓鱼链接" },
+  { label: ".RId", detail: "追踪ID", info: "用于追踪收件人的唯一ID" },
+  { label: ".Email", detail: "收件人邮箱", info: "收件人的邮箱地址" },
+  { label: ".FullName", detail: "收件人姓名", info: "收件人的名称" },
+  { label: ".Position", detail: "职位", info: "收件人的职位" },
+  { label: ".From", detail: "发件人", info: "发件人的邮箱地址" },
+  {
+    label: ".Tracker",
+    detail: "追踪图片",
+    info: "用于追踪邮件是否打开的隐藏图片标签",
+  },
+  {
+    label: ".TrackingURL",
+    detail: "追踪URL",
+    info: "用于追踪邮件是否打开的URL地址",
+  },
+  { label: ".BaseURL", detail: "基础URL", info: "去掉路径和追踪ID的基础URL" },
+  {
+    label: ".QRCode",
+    detail: "二维码",
+    info: "钓鱼链接对应的二维码图片 (Base64)",
+  },
 ];
 
-function templateCompletions(context: CompletionContext): CompletionResult | null {
+function templateCompletions(
+  context: CompletionContext,
+): CompletionResult | null {
   // Match the word portion after '{{' (e.g. '.URL', '.U', or empty after '{{')
   const word = context.matchBefore(/\.?\w*/);
   if (!word) return null;
   // Verify '{{' exists right before the match
   if (word.from < 2) return null;
   const prefix = context.state.doc.sliceString(word.from - 2, word.from);
-  if (prefix !== '{{') return null;
+  if (prefix !== "{{") return null;
 
   return {
     from: word.from,
@@ -280,7 +354,11 @@ function templateCompletions(context: CompletionContext): CompletionResult | nul
   };
 }
 
-const cmExtensions = [html(), oneDark, autocompletion({ override: [templateCompletions] })];
+const cmExtensions = [
+  html(),
+  oneDark,
+  autocompletion({ override: [templateCompletions] }),
+];
 const showPreview = ref(false);
 const previewFrame = ref<HTMLIFrameElement | null>(null);
 void previewFrame;
@@ -290,10 +368,10 @@ function togglePreview() {
 }
 
 const columns = [
-  { title: '模板名称', dataIndex: 'name', key: 'name' },
-  { title: '邮件主题', dataIndex: 'subject', key: 'subject' },
-  { title: '修改时间', dataIndex: 'modified_date', key: 'modified_date' },
-  { title: '操作', key: 'action' },
+  { title: "模板名称", dataIndex: "name", key: "name" },
+  { title: "邮件主题", dataIndex: "subject", key: "subject" },
+  { title: "修改时间", dataIndex: "modified_date", key: "modified_date" },
+  { title: "操作", key: "action" },
 ];
 
 onMounted(() => {
@@ -304,11 +382,14 @@ onMounted(() => {
 async function loadTemplates() {
   loading.value = true;
   try {
-    const result = await getTemplates({ pageNum: pagination.current, pageSize: pagination.pageSize });
+    const result = await getTemplates({
+      pageNum: pagination.current,
+      pageSize: pagination.pageSize,
+    });
     templates.value = result.data || [];
     pagination.total = result.total || 0;
   } catch (error) {
-    message.error('加载模板失败');
+    message.error("加载模板失败");
   } finally {
     loading.value = false;
   }
@@ -336,11 +417,11 @@ async function loadSMTPProfiles() {
 function showCreateModal() {
   editingTemplate.value = null;
   formData.value = {
-    name: '',
-    subject: '',
-    envelope_sender: '',
-    html: '',
-    text: '',
+    name: "",
+    subject: "",
+    envelope_sender: "",
+    html: "",
+    text: "",
     useTracker: true,
     attachments: [],
   };
@@ -349,21 +430,28 @@ function showCreateModal() {
 }
 
 function assignAttachmentUids(attachments: any[]) {
-  attachments.forEach(a => { a.uid = ++attachmentUid; });
+  attachments.forEach((a) => {
+    a.uid = ++attachmentUid;
+  });
   return attachments;
 }
 
 function showEditModal(template: any) {
   editingTemplate.value = template;
-  const hasTracker = template.html && (template.html.includes('{{.Tracker}}') || template.html.includes('{{.TrackingUrl}}'));
+  const hasTracker =
+    template.html &&
+    (template.html.includes("{{.Tracker}}") ||
+      template.html.includes("{{.TrackingUrl}}"));
   formData.value = {
     name: template.name,
     subject: template.subject,
-    envelope_sender: template.envelope_sender || '',
-    html: template.html || '',
-    text: template.text || '',
+    envelope_sender: template.envelope_sender || "",
+    html: template.html || "",
+    text: template.text || "",
     useTracker: hasTracker,
-    attachments: template.attachments ? assignAttachmentUids(template.attachments.map((a: any) => ({ ...a }))) : [],
+    attachments: template.attachments
+      ? assignAttachmentUids(template.attachments.map((a: any) => ({ ...a })))
+      : [],
   };
   editorKey.value = Date.now();
   modalVisible.value = true;
@@ -371,15 +459,20 @@ function showEditModal(template: any) {
 
 function handleDuplicate(template: any) {
   editingTemplate.value = null;
-  const hasTracker = template.html && (template.html.includes('{{.Tracker}}') || template.html.includes('{{.TrackingUrl}}'));
+  const hasTracker =
+    template.html &&
+    (template.html.includes("{{.Tracker}}") ||
+      template.html.includes("{{.TrackingUrl}}"));
   formData.value = {
     name: `${template.name} - 副本`,
     subject: template.subject,
-    envelope_sender: template.envelope_sender || '',
-    html: template.html || '',
-    text: template.text || '',
+    envelope_sender: template.envelope_sender || "",
+    html: template.html || "",
+    text: template.text || "",
     useTracker: hasTracker,
-    attachments: template.attachments ? assignAttachmentUids(template.attachments.map((a: any) => ({ ...a }))) : [],
+    attachments: template.attachments
+      ? assignAttachmentUids(template.attachments.map((a: any) => ({ ...a })))
+      : [],
   };
   editorKey.value = Date.now();
   modalVisible.value = true;
@@ -388,8 +481,8 @@ function handleDuplicate(template: any) {
 function handleAttachmentUpload(file: File) {
   const reader = new FileReader();
   reader.onload = (e: any) => {
-    const content = e.target.result.split(',')[1];
-    const type = file.type || 'application/octet-stream';
+    const content = e.target.result.split(",")[1];
+    const type = file.type || "application/octet-stream";
     formData.value.attachments.push({
       uid: ++attachmentUid,
       name: file.name,
@@ -406,11 +499,14 @@ async function handleSave() {
   try {
     let html = formData.value.html;
     if (formData.value.useTracker) {
-      if (html.indexOf('{{.Tracker}}') === -1 && html.indexOf('{{.TrackingUrl}}') === -1) {
-        html = html.replace('</body>', '{{.Tracker}}</body>');
+      if (
+        html.indexOf("{{.Tracker}}") === -1 &&
+        html.indexOf("{{.TrackingUrl}}") === -1
+      ) {
+        html = html.replace("</body>", "{{.Tracker}}</body>");
       }
     } else {
-      html = html.replace('{{.Tracker}}</body>', '</body>');
+      html = html.replace("{{.Tracker}}</body>", "</body>");
     }
     const payload = {
       name: formData.value.name,
@@ -422,15 +518,17 @@ async function handleSave() {
     };
     if (editingTemplate.value) {
       await updateTemplate(editingTemplate.value.id, payload);
-      message.success('模板更新成功');
+      message.success("模板更新成功");
     } else {
       await createTemplate(payload);
-      message.success('模板创建成功');
+      message.success("模板创建成功");
     }
     modalVisible.value = false;
     resetPagination();
   } catch (error: any) {
-    message.error(error?.response?.data?.message || error?.message || '保存失败');
+    message.error(
+      error?.response?.data?.message || error?.message || "保存失败",
+    );
   } finally {
     saving.value = false;
   }
@@ -443,20 +541,20 @@ function handlePreview() {
 
 async function handleTestSend() {
   if (!formData.value.name) {
-    message.warning('请先保存模板后再发送测试');
+    message.warning("请先保存模板后再发送测试");
     return;
   }
-  testSendForm.value = { smtp_name: '', to: '' };
+  testSendForm.value = { smtp_name: "", to: "" };
   testSendVisible.value = true;
 }
 
 async function handleTestSendConfirm() {
   if (!testSendForm.value.smtp_name) {
-    message.warning('请选择发送配置');
+    message.warning("请选择发送配置");
     return;
   }
   if (!testSendForm.value.to) {
-    message.warning('请输入收件人邮箱');
+    message.warning("请输入收件人邮箱");
     return;
   }
   testSending.value = true;
@@ -466,10 +564,12 @@ async function handleTestSendConfirm() {
       smtp: { name: testSendForm.value.smtp_name },
       email: testSendForm.value.to,
     });
-    message.success('测试邮件发送成功');
+    message.success("测试邮件发送成功");
     testSendVisible.value = false;
   } catch (error: any) {
-    message.error(error?.response?.data?.message || error?.message || '测试邮件发送失败');
+    message.error(
+      error?.response?.data?.message || error?.message || "测试邮件发送失败",
+    );
   } finally {
     testSending.value = false;
   }
@@ -477,29 +577,29 @@ async function handleTestSendConfirm() {
 
 function handleDelete(id: number) {
   Modal.confirm({
-    title: '确认删除',
-    content: '确定要删除这个模板吗？此操作不可恢复。',
+    title: "确认删除",
+    content: "确定要删除这个模板吗？此操作不可恢复。",
     onOk: async () => {
       try {
         await deleteTemplate(id);
-        message.success('删除成功');
+        message.success("删除成功");
         resetPagination();
       } catch (error) {
-        message.error('删除失败');
+        message.error("删除失败");
       }
     },
   });
 }
 
 function showImportEmailModal() {
-  importEmailContent.value = '';
+  importEmailContent.value = "";
   importEmailConvertLinks.value = true;
   importEmailVisible.value = true;
 }
 
 async function handleImportEmail() {
   if (!importEmailContent.value) {
-    message.warning('请输入邮件内容');
+    message.warning("请输入邮件内容");
     return;
   }
   importingEmail.value = true;
@@ -512,9 +612,11 @@ async function handleImportEmail() {
     if (data.html) formData.value.html = data.html;
     if (data.text) formData.value.text = data.text;
     importEmailVisible.value = false;
-    message.success('邮件导入成功');
+    message.success("邮件导入成功");
   } catch (error: any) {
-    message.error(error?.response?.data?.message || error?.message || '导入失败');
+    message.error(
+      error?.response?.data?.message || error?.message || "导入失败",
+    );
   } finally {
     importingEmail.value = false;
   }
@@ -562,7 +664,7 @@ async function handleImportEmail() {
 }
 
 .editor-pane :deep(.cm-scroller) {
-  font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+  font-family: "Fira Code", "Consolas", "Monaco", monospace;
 }
 
 .preview-iframe {
