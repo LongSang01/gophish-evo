@@ -202,6 +202,7 @@ let attachmentUid = 0;
 import { Codemirror } from 'vue-codemirror';
 import { html } from '@codemirror/lang-html';
 import { oneDark } from '@codemirror/theme-one-dark';
+import { autocompletion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { getTemplates, createTemplate, updateTemplate, deleteTemplate, sendTestEmail, importEmail } from '@/api/templates';
 import { getSMTPProfiles } from '@/api/smtp';
 import { formatDate } from '@/utils/format';
@@ -249,7 +250,37 @@ const formData = ref({
   attachments: [] as any[],
 });
 
-const cmExtensions = [html(), oneDark];
+// GoPhish template variables with descriptions
+const templateVariables = [
+  { label: '.URL', detail: '钓鱼链接', info: '包含收件人唯一ID的钓鱼URL' },
+  { label: '.RId', detail: '收件人ID', info: '收件人的唯一标识符' },
+  { label: '.Email', detail: '收件人邮箱', info: '收件人的邮箱地址' },
+  { label: '.FullName', detail: '收件人姓名', info: '收件人的全名' },
+  { label: '.Position', detail: '职位', info: '收件人的职位' },
+  { label: '.From', detail: '发件人', info: '发件人邮箱地址' },
+  { label: '.Tracker', detail: '追踪图片', info: '用于邮件打开追踪的隐藏图片标签' },
+  { label: '.TrackingURL', detail: '追踪URL', info: '追踪处理器的URL地址' },
+  { label: '.BaseURL', detail: '基础URL', info: '去掉路径和rid参数的基础URL，适合链接静态文件' },
+  { label: '.QRCode', detail: '二维码', info: '钓鱼链接的二维码图片 (Base64)' },
+];
+
+function templateCompletions(context: CompletionContext): CompletionResult | null {
+  // Match the word portion after '{{' (e.g. '.URL', '.U', or empty after '{{')
+  const word = context.matchBefore(/\.?\w*/);
+  if (!word) return null;
+  // Verify '{{' exists right before the match
+  if (word.from < 2) return null;
+  const prefix = context.state.doc.sliceString(word.from - 2, word.from);
+  if (prefix !== '{{') return null;
+
+  return {
+    from: word.from,
+    options: templateVariables,
+    validFor: /^\.?\w*/,
+  };
+}
+
+const cmExtensions = [html(), oneDark, autocompletion({ override: [templateCompletions] })];
 const showPreview = ref(false);
 const previewFrame = ref<HTMLIFrameElement | null>(null);
 void previewFrame;

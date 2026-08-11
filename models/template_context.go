@@ -8,7 +8,6 @@ import (
 	"net/mail"
 	"net/url"
 	"path"
-	"strings"
 	"sync"
 	"text/template"
 
@@ -35,23 +34,6 @@ type PhishingTemplateContext struct {
 	QRCode      string
 	phishURL    string
 	BaseRecipient
-}
-
-// FirstName returns the first name portion of FullName for template
-// backward compatibility with {{.FirstName}}.
-func (p PhishingTemplateContext) FirstName() string {
-	parts := strings.SplitN(p.FullName, " ", 2)
-	return parts[0]
-}
-
-// LastName returns the last name portion of FullName for template
-// backward compatibility with {{.LastName}}.
-func (p PhishingTemplateContext) LastName() string {
-	parts := strings.SplitN(p.FullName, " ", 2)
-	if len(parts) > 1 {
-		return parts[1]
-	}
-	return ""
 }
 
 // NewPhishingTemplateContext returns a populated PhishingTemplateContext,

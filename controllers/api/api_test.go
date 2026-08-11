@@ -549,7 +549,7 @@ func TestGetTemplates(t *testing.T) {
 func TestCreateTemplate(t *testing.T) {
 	tc := setupTest(t)
 
-	body := `{"name":"New Template","subject":"Test Subject","text":"Hello {{.FirstName}}","html":"<html>Hello {{.FirstName}}</html>"}`
+	body := `{"name":"New Template","subject":"Test Subject","text":"Hello {{.FullName}}","html":"<html>Hello {{.FullName}}</html>"}`
 	r := httptest.NewRequest(http.MethodPost, "/api/templates/", bytes.NewBufferString(body))
 	r.Header.Set("Content-Type", "application/json")
 	r = ctx.Set(r, "user_id", int64(1))
