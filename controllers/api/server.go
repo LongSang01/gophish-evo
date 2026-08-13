@@ -56,6 +56,11 @@ func (as *Server) registerRoutes() {
 	root := mux.NewRouter()
 	root = root.StrictSlash(true)
 
+	// Apply rate limiting to all routes
+	root.Use(func(next http.Handler) http.Handler {
+		return as.limiter.Limit(next)
+	})
+
 	// Public auth routes (no authentication required)
 	public := root.PathPrefix("/api/").Subrouter()
 	public.HandleFunc("/auth/login", as.Login).Methods("POST", "OPTIONS")
@@ -77,11 +82,16 @@ func (as *Server) registerRoutes() {
 	protected.HandleFunc("/reset", as.Reset)
 	protected.HandleFunc("/campaigns/", as.Campaigns)
 	protected.HandleFunc("/campaigns/summary", as.CampaignsSummary)
+	protected.HandleFunc("/campaigns/dashboard-stats", as.DashboardStats)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}", as.Campaign)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/results", as.CampaignResults)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/summary", as.CampaignSummary)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/complete", as.CampaignComplete)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/launch", as.CampaignLaunch)
+	protected.HandleFunc("/campaigns/{id:[0-9]+}/client/code", as.ClientCode)
+	protected.HandleFunc("/campaigns/{id:[0-9]+}/page/url", as.PageURL)
+	protected.HandleFunc("/campaigns/{id:[0-9]+}/reports", as.CampaignReports)
+	protected.HandleFunc("/campaigns/{id:[0-9]+}/reports/export", as.CampaignReportsExport)
 	protected.HandleFunc("/groups/", as.Groups)
 	protected.HandleFunc("/groups/summary", as.GroupsSummary)
 	protected.HandleFunc("/groups/{id:[0-9]+}", as.Group)

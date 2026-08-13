@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -25,6 +27,16 @@ type cloneRequest struct {
 func (cr *cloneRequest) validate() error {
 	if cr.URL == "" {
 		return errors.New("No URL Specified")
+	}
+	u, err := url.Parse(cr.URL)
+	if err != nil {
+		return errors.New("Invalid URL")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return errors.New("Only http and https URLs are allowed")
+	}
+	if u.Host == "" {
+		return errors.New("URL must have a host")
 	}
 	return nil
 }
@@ -121,7 +133,16 @@ func (as *Server) ImportSite(w http.ResponseWriter, r *http.Request) {
 			InsecureSkipVerify: true,
 		},
 	}
-	client := &http.Client{Transport: tr}
+	// Don't follow redirects automatically — the redirect target may point
+	// to an internal IP that bypasses the restricted dialer.  Instead we
+	// return the initial response so the caller only ever contacts the
+	// user-specified host.
+	client := &http.Client{
+		Transport: tr,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	resp, err := client.Get(cr.URL)
 	if err != nil {
 		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
@@ -135,7 +156,7 @@ func (as *Server) ImportSite(w http.ResponseWriter, r *http.Request) {
 	}
 	// Assuming we don't want to include resources, we'll need a base href
 	if d.Find("head base").Length() == 0 {
-		d.Find("head").PrependHtml(fmt.Sprintf("<base href=\"%s\">", cr.URL))
+		d.Find("head").PrependHtml(fmt.Sprintf("<base href=\"%s\">", html.EscapeString(cr.URL)))
 	}
 	forms := d.Find("form")
 	forms.Each(func(i int, f *goquery.Selection) {
@@ -145,7 +166,7 @@ func (as *Server) ImportSite(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(url, "http") {
 			url = fmt.Sprintf("%s%s", cr.URL, url)
 		}
-		f.PrependHtml(fmt.Sprintf("<input type=\"hidden\" name=\"__original_url\" value=\"%s\"/>", url))
+		f.PrependHtml(fmt.Sprintf("<input type=\"hidden\" name=\"__original_url\" value=\"%s\"/>", html.EscapeString(url)))
 	})
 	h, err := d.Html()
 	if err != nil {

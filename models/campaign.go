@@ -7,32 +7,36 @@ import (
 
 	log "github.com/gophish/gophish/logger"
 	"github.com/gophish/gophish/webhook"
-	"github.com/jinzhu/gorm"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 // Campaign is a struct representing a created campaign
 type Campaign struct {
-	Id            int64         `json:"id"`
-	UserId        int64         `json:"-"`
-	Name          string        `json:"name" sql:"not null"`
-	CreatedDate   time.Time     `json:"created_date"`
-	LaunchDate    time.Time     `json:"launch_date"`
-	SendByDate    time.Time     `json:"send_by_date"`
-	CompletedDate time.Time     `json:"completed_date"`
-	TemplateId    int64         `json:"-"`
-	Template      Template      `json:"template"`
-	PageId        int64         `json:"-"`
-	Page          Page          `json:"page"`
-	Status        string        `json:"status"`
-	Results       []Result      `json:"results,omitempty"`
-	Groups        []Group       `json:"groups,omitempty"`
-	Events        []Event       `json:"timeline,omitempty"`
-	SMTPId        int64         `json:"-"`
-	SMTP          SMTP          `json:"smtp"`
-	SMTPs         []SMTP        `json:"smtps,omitempty" gorm:"-"`
-	URL           string        `json:"url"`
-	Stats         CampaignStats `json:"stats" gorm:"-"`
+	Id               int64         `json:"id"`
+	UserId           int64         `json:"-"`
+	Name             string        `json:"name" sql:"not null"`
+	CreatedDate      time.Time     `json:"created_date"`
+	LaunchDate       time.Time     `json:"launch_date"`
+	SendByDate       time.Time     `json:"send_by_date"`
+	CompletedDate    time.Time     `json:"completed_date"`
+	TemplateId       int64         `json:"-"`
+	Template         Template      `json:"template"`
+	PageId           int64         `json:"-"`
+	Page             Page          `json:"page"`
+	Status           string        `json:"status"`
+	Results          []Result      `json:"results,omitempty"`
+	Groups           []Group       `json:"groups,omitempty" gorm:"-"`
+	Events           []Event       `json:"timeline,omitempty"`
+	SMTPId           int64         `json:"-"`
+	SMTP             SMTP          `json:"smtp"`
+	SMTPs            []SMTP        `json:"smtps,omitempty" gorm:"-"`
+	URL              string        `json:"url"`
+	Stats            CampaignStats `json:"stats" gorm:"-"`
+	SourceType       string        `json:"source_type" gorm:"column:source_type"`
+	ReportConfig     *ReportConfig `json:"report_config,omitempty" gorm:"-"`
+	ReportSalt       string        `json:"-" gorm:"column:report_salt"`
+	ReportConfigJSON string        `json:"-" gorm:"column:report_config_json"`
 }
 
 // CampaignResults is a struct representing the results from a campaign
@@ -40,10 +44,10 @@ type CampaignResults struct {
 	Id      int64    `json:"id"`
 	Name    string   `json:"name"`
 	Status  string   `json:"status"`
-	Total   int64    `json:"total"`
-	Results []Result `json:"results,omitempty"`
-	Events  []Event  `json:"timeline,omitempty"`
-	SMTPs   []SMTP   `json:"smtps,omitempty"`
+	Total   int64    `json:"total" gorm:"-"`
+	Results []Result `json:"results,omitempty" gorm:"-"`
+	Events  []Event  `json:"timeline,omitempty" gorm:"-"`
+	SMTPs   []SMTP   `json:"smtps,omitempty" gorm:"-"`
 }
 
 // CampaignSummaries is a struct representing the overview of campaigns
@@ -61,7 +65,8 @@ type CampaignSummary struct {
 	CompletedDate time.Time     `json:"completed_date"`
 	Status        string        `json:"status"`
 	Name          string        `json:"name"`
-	Stats         CampaignStats `json:"stats"`
+	SourceType    string        `json:"source_type"`
+	Stats         CampaignStats `json:"stats" gorm:"-"`
 }
 
 // CampaignStats is a struct representing the statistics for a single campaign
@@ -72,6 +77,7 @@ type CampaignStats struct {
 	ClickedLink   int64 `json:"clicked"`
 	SubmittedData int64 `json:"submitted_data"`
 	EmailReported int64 `json:"email_reported"`
+	ReportCount   int64 `json:"report_count"` // records in reports_ext (client/page)
 	Error         int64 `json:"error"`
 }
 
@@ -135,6 +141,17 @@ const RecipientParameter = "rid"
 
 // Validate checks to make sure there are no invalid fields in a submitted campaign
 func (c *Campaign) Validate() error {
+	if c.SourceType == "" {
+		c.SourceType = SourceTypeEmail
+	}
+	// Non-email activities (client / fixed page) don't require an email
+	// template, target groups or sending profiles.
+	if c.SourceType == SourceTypeClient || c.SourceType == SourceTypePage {
+		if c.Name == "" {
+			return ErrCampaignNameNotSpecified
+		}
+		return nil
+	}
 	switch {
 	case c.Name == "":
 		return ErrCampaignNameNotSpecified
@@ -167,15 +184,15 @@ func (c *Campaign) UpdateStatus(s string) error {
 func GetCampaignForContext(id int64, uid int64) (Campaign, error) {
 	c := Campaign{}
 	err := db.Table("campaigns").
-		Select("id, user_id, page_id, status, url, smtp_id").
-		Where("id=? AND user_id=?", id, uid).Find(&c).Error
+		Select("id, user_id, page_id, status, url, smtp_id, source_type").
+		Where("id=? AND user_id=?", id, uid).First(&c).Error
 	if err != nil {
 		return c, err
 	}
 	// Load the primary SMTP so that getFromAddress() returns the configured
 	// "From" address used when rendering the landing page. This mirrors the
 	// behavior of GetCampaign's getDetails().
-	err = db.Table("smtp").Where("id=?", c.SMTPId).Find(&c.SMTP).Error
+	err = db.Table("smtp").Where("id=?", c.SMTPId).First(&c.SMTP).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return c, err
@@ -213,17 +230,18 @@ func AddEvent(e *Event, campaignID int64) error {
 // an error is returned. Otherwise, the attribute name is set to [Deleted],
 // indicating the user deleted the attribute (template, smtp, etc.)
 func (c *Campaign) getDetails() error {
-	err := db.Model(c).Related(&c.Results).Error
+	// Use explicit queries instead of Related() which was removed in GORM v2
+	err := db.Where("campaign_id=?", c.Id).Find(&c.Results).Error
 	if err != nil {
 		log.Warnf("%s: results not found for campaign", err)
 		return err
 	}
-	err = db.Model(c).Related(&c.Events).Error
+	err = db.Where("campaign_id=?", c.Id).Find(&c.Events).Error
 	if err != nil {
 		log.Warnf("%s: events not found for campaign", err)
 		return err
 	}
-	err = db.Table("templates").Select("id, name, envelope_sender, subject, modified_date").Where("id=?", c.TemplateId).Find(&c.Template).Error
+	err = db.Table("templates").Select("id, name, envelope_sender, subject, modified_date").Where("id=?", c.TemplateId).First(&c.Template).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return err
@@ -236,7 +254,7 @@ func (c *Campaign) getDetails() error {
 		log.Warn(err)
 		return err
 	}
-	err = db.Table("pages").Select("id, user_id, name, capture_credentials, capture_passwords, redirect_url, modified_date").Where("id=?", c.PageId).Find(&c.Page).Error
+	err = db.Table("pages").Select("id, user_id, name, html, capture_credentials, capture_passwords, redirect_url, modified_date").Where("id=?", c.PageId).First(&c.Page).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return err
@@ -244,7 +262,7 @@ func (c *Campaign) getDetails() error {
 		c.Page = Page{Name: "[Deleted]"}
 		log.Warnf("%s: page not found for campaign", err)
 	}
-	err = db.Table("smtp").Where("id=?", c.SMTPId).Find(&c.SMTP).Error
+	err = db.Table("smtp").Where("id=?", c.SMTPId).First(&c.SMTP).Error
 	if err != nil {
 		// Check if the SMTP was deleted
 		if err != gorm.ErrRecordNotFound {
@@ -265,23 +283,20 @@ func (c *Campaign) getDetails() error {
 		log.Warn(err)
 	}
 
-	// Load groups associated with this campaign
-	err = db.Model(c).Related(&c.Groups, "Groups").Error
-	if err != nil {
-		log.Warnf("%s: groups not found for campaign", err)
-	}
-	// Load targets for each group
-	for i := range c.Groups {
-		err = db.Model(&c.Groups[i]).Related(&c.Groups[i].Targets).Error
-		if err != nil && err != gorm.ErrRecordNotFound {
-			log.Warnf("%s: targets not found for group %d", err, c.Groups[i].Id)
-		}
-	}
-
 	// Load campaign stats
 	c.Stats, err = getCampaignStats(c.Id)
 	if err != nil {
 		log.Warnf("%s: stats not found for campaign", err)
+	}
+
+	// Load the report config for client/page type activities.
+	if c.SourceType == SourceTypeClient || c.SourceType == SourceTypePage {
+		rc, err := GetCampaignReportConfig(c)
+		if err != nil {
+			log.Warn(err)
+		} else {
+			c.ReportConfig = rc
+		}
 	}
 
 	return nil
@@ -329,50 +344,54 @@ func getCampaignStats(cid int64) (CampaignStats, error) {
 	if err != nil {
 		return s, err
 	}
-	query.Where("status=?", EventDataSubmit).Count(&s.SubmittedData)
-	if err != nil {
+	if err = db.Table("results").Where("campaign_id = ?", cid).Where("status=?", EventDataSubmit).Count(&s.SubmittedData).Error; err != nil {
 		return s, err
 	}
-	query.Where("status=?", EventClicked).Count(&s.ClickedLink)
-	if err != nil {
+	if err = db.Table("results").Where("campaign_id = ?", cid).Where("status=?", EventClicked).Count(&s.ClickedLink).Error; err != nil {
 		return s, err
 	}
-	query.Where("reported=?", true).Count(&s.EmailReported)
-	if err != nil {
+	if err = db.Table("results").Where("campaign_id = ?", cid).Where("reported=?", true).Count(&s.EmailReported).Error; err != nil {
 		return s, err
 	}
 	// Every submitted data event implies they clicked the link
 	s.ClickedLink += s.SubmittedData
-	err = query.Where("status=?", EventOpened).Count(&s.OpenedEmail).Error
-	if err != nil {
+	if err = db.Table("results").Where("campaign_id = ?", cid).Where("status=?", EventOpened).Count(&s.OpenedEmail).Error; err != nil {
 		return s, err
 	}
 	// Every clicked link event implies they opened the email
 	s.OpenedEmail += s.ClickedLink
-	err = query.Where("status=?", EventSent).Count(&s.EmailsSent).Error
-	if err != nil {
+	if err = db.Table("results").Where("campaign_id = ?", cid).Where("status=?", EventSent).Count(&s.EmailsSent).Error; err != nil {
 		return s, err
 	}
 	// Every opened email event implies the email was sent
 	s.EmailsSent += s.OpenedEmail
-	err = query.Where("status=?", Error).Count(&s.Error).Error
+	if err = db.Table("results").Where("campaign_id = ?", cid).Where("status=?", Error).Count(&s.Error).Error; err != nil {
+		return s, err
+	}
+
+	// For client/page campaigns, query reports_ext for the actual report count.
+	// Email campaigns never write to reports_ext, so this stays zero for them.
+	if err = db.Table("reports_ext").Where("campaign_id = ?", cid).Count(&s.ReportCount).Error; err != nil {
+		return s, err
+	}
+	// Also populate SubmittedData for client/page campaigns (the email-specific
+	// SubmittedData count from results is always zero for these types).
+	if s.ReportCount > 0 && s.SubmittedData == 0 {
+		s.SubmittedData = s.ReportCount
+	}
 	return s, err
 }
 
-// GetCampaigns returns the campaigns owned by the given user.
+// GetCampaigns returns a paginated page of campaigns owned by the given user.
 func GetCampaigns(uid int64, pp PageParams) ([]Campaign, int64, error) {
 	cs := []Campaign{}
 	var total int64
-	if pp.Valid() {
-		if err := db.Table("campaigns").Where("user_id=?", uid).Count(&total).Error; err != nil {
-			log.Error(err)
-			return cs, 0, err
-		}
+	if err := db.Table("campaigns").Where("user_id=?", uid).Count(&total).Error; err != nil {
+		log.Error(err)
+		return cs, 0, err
 	}
 	query := db.Table("campaigns").Where("user_id=?", uid).Order("created_date DESC")
-	if pp.Valid() {
-		query = query.Limit(pp.PageSize).Offset(pp.Offset())
-	}
+	query = query.Limit(pp.PageSize).Offset(pp.Offset())
 	err := query.Find(&cs).Error
 	if err != nil {
 		log.Error(err)
@@ -384,30 +403,25 @@ func GetCampaigns(uid int64, pp PageParams) ([]Campaign, int64, error) {
 			log.Error(err)
 		}
 	}
-	if !pp.Valid() {
-		total = int64(len(cs))
-	}
 	return cs, total, nil
 }
 
-// GetCampaignSummaries gets the summary objects for all the campaigns
-// owned by the current user
+// GetCampaignSummaries gets a paginated page of summary objects for the
+// campaigns owned by the current user.
 func GetCampaignSummaries(uid int64, pp PageParams) (CampaignSummaries, error) {
 	overview := CampaignSummaries{}
 	cs := []CampaignSummary{}
+	var total int64
+	if err := db.Table("campaigns").Where("user_id = ?", uid).Count(&total).Error; err != nil {
+		log.Error(err)
+		return overview, err
+	}
+	overview.Total = total
 	// Get the basic campaign information
 	query := db.Table("campaigns").Where("user_id = ?", uid)
-	query = query.Select("id, name, created_date, launch_date, send_by_date, completed_date, status")
+	query = query.Select("id, name, created_date, launch_date, send_by_date, completed_date, status, source_type")
 	query = query.Order("created_date DESC")
-	if pp.Valid() {
-		var total int64
-		if err := db.Table("campaigns").Where("user_id = ?", uid).Count(&total).Error; err != nil {
-			log.Error(err)
-			return overview, err
-		}
-		overview.Total = total
-		query = query.Limit(pp.PageSize).Offset(pp.Offset())
-	}
+	query = query.Limit(pp.PageSize).Offset(pp.Offset())
 	err := query.Scan(&cs).Error
 	if err != nil {
 		log.Error(err)
@@ -421,19 +435,157 @@ func GetCampaignSummaries(uid int64, pp PageParams) (CampaignSummaries, error) {
 		}
 		cs[i].Stats = s
 	}
-	if !pp.Valid() {
-		overview.Total = int64(len(cs))
-	}
 	overview.Campaigns = cs
 	return overview, nil
+}
+
+// DashboardTimelineEntry holds per-campaign stats for the timeline chart.
+type DashboardTimelineEntry struct {
+	Id            int64     `json:"id"`
+	Name          string    `json:"name"`
+	CreatedDate   time.Time `json:"created_date"`
+	Status        string    `json:"status"`
+	Total         int64     `json:"total"`
+	EmailsSent    int64     `json:"sent"`
+	OpenedEmail   int64     `json:"opened"`
+	ClickedLink   int64     `json:"clicked"`
+	SubmittedData int64     `json:"submitted_data"`
+	EmailReported int64     `json:"email_reported"`
+	ReportCount   int64     `json:"report_count"`
+	Error         int64     `json:"error"`
+}
+
+// DashboardStatsResponse is the lightweight response for dashboard charts.
+type DashboardStatsResponse struct {
+	Stats    CampaignStats            `json:"stats"`
+	Timeline []DashboardTimelineEntry `json:"timeline"`
+}
+
+// GetDashboardStats returns aggregated campaign statistics using a single
+// efficient SQL query, avoiding the N+1 query problem of GetCampaignSummaries.
+func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
+	resp := DashboardStatsResponse{}
+
+	// Query 1: Aggregated stats across all campaigns for this user
+	type aggRow struct {
+		Total         int64
+		Sent          int64
+		Opened        int64
+		Clicked       int64
+		SubmittedData int64
+		Reported      int64
+		Error         int64
+	}
+	var row aggRow
+	err := db.Table("results").
+		Select(`
+			COUNT(*)                                                      AS total,
+			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS sent,
+			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS opened,
+			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS clicked,
+			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS submitted_data,
+			SUM(CASE WHEN reported = 1 THEN 1 ELSE 0 END)                AS reported,
+			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS error
+		`, EventSent, EventOpened, EventClicked, EventDataSubmit, Error).
+		Where("campaign_id IN (SELECT id FROM campaigns WHERE user_id = ?)", uid).
+		Scan(&row).Error
+	if err != nil {
+		return resp, err
+	}
+
+	// Apply running total backfill (same logic as getCampaignStats)
+	s := CampaignStats{
+		Total:         row.Total,
+		SubmittedData: row.SubmittedData,
+		ClickedLink:   row.Clicked + row.SubmittedData,
+		OpenedEmail:   row.Opened + row.Clicked + row.SubmittedData,
+		EmailsSent:    row.Sent + row.Opened + row.Clicked + row.SubmittedData,
+		EmailReported: row.Reported,
+		Error:         row.Error,
+	}
+
+	// Query reports_ext aggregated count
+	if err = db.Table("reports_ext").
+		Where("campaign_id IN (SELECT id FROM campaigns WHERE user_id = ?)", uid).
+		Count(&s.ReportCount).Error; err != nil {
+		return resp, err
+	}
+	if s.ReportCount > 0 && s.SubmittedData == 0 {
+		s.SubmittedData = s.ReportCount
+	}
+	resp.Stats = s
+
+	// Query 2: Per-campaign timeline data (one row per campaign)
+	type timelineRow struct {
+		Id            int64
+		Name          string
+		CreatedDate   time.Time
+		Status        string
+		Total         int64
+		Sent          int64
+		Opened        int64
+		Clicked       int64
+		SubmittedData int64
+		Reported      int64
+		Error         int64
+	}
+	var rows []timelineRow
+	err = db.Table("campaigns c").
+		Select(`
+			c.id, c.name, c.created_date, c.status,
+			COUNT(r.id)                                                      AS total,
+			SUM(CASE WHEN r.status = ? THEN 1 ELSE 0 END)                   AS sent,
+			SUM(CASE WHEN r.status = ? THEN 1 ELSE 0 END)                   AS opened,
+			SUM(CASE WHEN r.status = ? THEN 1 ELSE 0 END)                   AS clicked,
+			SUM(CASE WHEN r.status = ? THEN 1 ELSE 0 END)                   AS submitted_data,
+			SUM(CASE WHEN r.reported = 1 THEN 1 ELSE 0 END)                 AS reported,
+			SUM(CASE WHEN r.status = ? THEN 1 ELSE 0 END)                   AS error
+		`, EventSent, EventOpened, EventClicked, EventDataSubmit, Error).
+		Joins("LEFT JOIN results r ON r.campaign_id = c.id").
+		Where("c.user_id = ?", uid).
+		Group("c.id, c.name, c.created_date, c.status").
+		Order("c.created_date DESC").
+		Scan(&rows).Error
+	if err != nil {
+		return resp, err
+	}
+
+	// Convert timelineRows to DashboardTimelineEntry with running total backfill
+	timeline := make([]DashboardTimelineEntry, 0, len(rows))
+	for _, r_ := range rows {
+		entry := DashboardTimelineEntry{
+			Id:            r_.Id,
+			Name:          r_.Name,
+			CreatedDate:   r_.CreatedDate,
+			Status:        r_.Status,
+			Total:         r_.Total,
+			SubmittedData: r_.SubmittedData,
+			ClickedLink:   r_.Clicked + r_.SubmittedData,
+			OpenedEmail:   r_.Opened + r_.Clicked + r_.SubmittedData,
+			EmailsSent:    r_.Sent + r_.Opened + r_.Clicked + r_.SubmittedData,
+			EmailReported: r_.Reported,
+			Error:         r_.Error,
+		}
+		// Query per-campaign report count (lightweight COUNT)
+		if err = db.Table("reports_ext").Where("campaign_id = ?", r_.Id).Count(&entry.ReportCount).Error; err != nil {
+			return resp, err
+		}
+		if entry.ReportCount > 0 && entry.SubmittedData == 0 {
+			entry.SubmittedData = entry.ReportCount
+		}
+		timeline = append(timeline, entry)
+	}
+	resp.Timeline = timeline
+	return resp, nil
 }
 
 // GetCampaignSummary gets the summary object for a campaign specified by the campaign ID
 func GetCampaignSummary(id int64, uid int64) (CampaignSummary, error) {
 	cs := CampaignSummary{}
 	query := db.Table("campaigns").Where("user_id = ? AND id = ?", uid, id)
-	query = query.Select("id, name, created_date, launch_date, send_by_date, completed_date, status")
-	err := query.Scan(&cs).Error
+	query = query.Select("id, name, created_date, launch_date, send_by_date, completed_date, status, source_type")
+	// GORM v2: Scan does not return ErrRecordNotFound for zero rows; use First instead
+	err := query.First(&cs).Error
 	if err != nil {
 		log.Error(err)
 		return cs, err
@@ -456,11 +608,11 @@ func GetCampaignSummary(id int64, uid int64) (CampaignSummary, error) {
 // ref: #1726
 func GetCampaignMailContext(id int64, uid int64) (Campaign, error) {
 	c := Campaign{}
-	err := db.Where("id = ?", id).Where("user_id = ?", uid).Find(&c).Error
+	err := db.Where("id = ?", id).Where("user_id = ?", uid).First(&c).Error
 	if err != nil {
 		return c, err
 	}
-	err = db.Table("smtp").Where("id=?", c.SMTPId).Find(&c.SMTP).Error
+	err = db.Table("smtp").Where("id=?", c.SMTPId).First(&c.SMTP).Error
 	if err != nil {
 		return c, err
 	}
@@ -468,7 +620,7 @@ func GetCampaignMailContext(id int64, uid int64) (Campaign, error) {
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return c, err
 	}
-	err = db.Table("templates").Where("id=?", c.TemplateId).Find(&c.Template).Error
+	err = db.Table("templates").Where("id=?", c.TemplateId).First(&c.Template).Error
 	if err != nil {
 		return c, err
 	}
@@ -488,7 +640,7 @@ func GetCampaignMailContext(id int64, uid int64) (Campaign, error) {
 // GetCampaign returns the campaign, if it exists, specified by the given id and user_id.
 func GetCampaign(id int64, uid int64) (Campaign, error) {
 	c := Campaign{}
-	err := db.Where("id = ?", id).Where("user_id = ?", uid).Find(&c).Error
+	err := db.Where("id = ?", id).Where("user_id = ?", uid).First(&c).Error
 	if err != nil {
 		log.Errorf("%s: campaign not found", err)
 		return c, err
@@ -497,10 +649,11 @@ func GetCampaign(id int64, uid int64) (Campaign, error) {
 	return c, err
 }
 
-// GetCampaignResults returns just the campaign results for the given campaign
+// GetCampaignResults returns a paginated page of campaign results for the
+// given campaign.
 func GetCampaignResults(id int64, uid int64, pp PageParams) (CampaignResults, error) {
 	cr := CampaignResults{}
-	err := db.Table("campaigns").Where("id=? and user_id=?", id, uid).Find(&cr).Error
+	err := db.Table("campaigns").Where("id=? and user_id=?", id, uid).First(&cr).Error
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"campaign_id": id,
@@ -508,21 +661,16 @@ func GetCampaignResults(id int64, uid int64, pp PageParams) (CampaignResults, er
 		}).Error(err)
 		return cr, err
 	}
-	query := db.Table("results").Where("campaign_id=? and user_id=?", cr.Id, uid).Order("id ASC")
-	if pp.Valid() {
-		if err := db.Table("results").Where("campaign_id=? and user_id=?", cr.Id, uid).Count(&cr.Total).Error; err != nil {
-			log.Errorf("%s: results not found for campaign", err)
-			return cr, err
-		}
-		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	if err := db.Table("results").Where("campaign_id=? and user_id=?", cr.Id, uid).Count(&cr.Total).Error; err != nil {
+		log.Errorf("%s: results not found for campaign", err)
+		return cr, err
 	}
+	query := db.Table("results").Where("campaign_id=? and user_id=?", cr.Id, uid).Order("id ASC")
+	query = query.Limit(pp.PageSize).Offset(pp.Offset())
 	err = query.Find(&cr.Results).Error
 	if err != nil {
 		log.Errorf("%s: results not found for campaign", err)
 		return cr, err
-	}
-	if !pp.Valid() {
-		cr.Total = int64(len(cr.Results))
 	}
 	err = db.Table("events").Where("campaign_id=?", cr.Id).Find(&cr.Events).Error
 	if err != nil {
@@ -570,6 +718,9 @@ func PostCampaign(c *Campaign, uid int64) error {
 	err := c.Validate()
 	if err != nil {
 		return err
+	}
+	if c.SourceType == SourceTypeClient || c.SourceType == SourceTypePage {
+		return postReportCampaign(c, uid)
 	}
 	// Fill in the details
 	c.UserId = uid
@@ -774,6 +925,65 @@ func PostCampaign(c *Campaign, uid int64) error {
 	return tx.Commit().Error
 }
 
+// postReportCampaign persists a client/page type activity. It generates a
+// per-campaign random report salt (persisted so keys survive restarts),
+// normalizes the dynamic report configuration and stores the campaign without
+// any email-related setup.
+func postReportCampaign(c *Campaign, uid int64) error {
+	c.UserId = uid
+	c.CreatedDate = time.Now().UTC()
+	c.CompletedDate = time.Time{}
+	c.Status = CampaignInProgress
+	// Generate a per-campaign random salt used to derive the report key.
+	salt, err := GenerateReportSalt()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	c.ReportSalt = salt
+	// Page-type campaigns need a valid landing page. Resolve the page by
+	// name so that PageId is populated and renderFixedPage can serve it.
+	if c.SourceType == SourceTypePage {
+		if c.Page.Name == "" {
+			return ErrPageNotSpecified
+		}
+		p, err := GetPageByName(c.Page.Name, uid)
+		if err == gorm.ErrRecordNotFound {
+			return ErrPageNotFound
+		} else if err != nil {
+			log.Error(err)
+			return err
+		}
+		c.Page = p
+		c.PageId = p.Id
+	}
+	// Normalize the report configuration.
+	rc := c.ReportConfig
+	if rc == nil {
+		rc, err = GetCampaignReportConfig(c)
+		if err != nil {
+			return err
+		}
+	}
+	if rc == nil || len(rc.Fields) == 0 {
+		if c.SourceType == SourceTypePage {
+			rc = NewPageReportConfig()
+		} else {
+			rc = NewReportConfig()
+		}
+	}
+	c.ReportConfig = rc
+	c.ReportConfigJSON = rc.Marshal()
+	if err := db.Save(c).Error; err != nil {
+		log.Error(err)
+		return err
+	}
+	if err := AddEvent(&Event{Message: "Campaign Created"}, c.Id); err != nil {
+		log.Error(err)
+	}
+	return nil
+}
+
 // generateUniqueResultIds generates n unique result ids, checking for
 // collisions both against the database and within the generated batch using a
 // single batched query per round instead of one query per id.
@@ -888,6 +1098,23 @@ func insertMailLogsBulk(tx *gorm.DB, maillogs []MailLog) error {
 	return nil
 }
 
+// deleteAllCampaignsForUser deletes every campaign belonging to the given user.
+// It fetches only campaign IDs (not full objects) and delegates the actual
+// cleanup to DeleteCampaign so that results, events, maillogs, reports and
+// campaign_smtps join records are properly removed.
+func deleteAllCampaignsForUser(uid int64) error {
+	var ids []int64
+	if err := db.Table("campaigns").Where("user_id=?", uid).Pluck("id", &ids).Error; err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := DeleteCampaign(id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // DeleteCampaign deletes the specified campaign
 func DeleteCampaign(id int64) error {
 	log.WithFields(logrus.Fields{
@@ -910,6 +1137,11 @@ func DeleteCampaign(id int64) error {
 		return err
 	}
 	err = db.Where("campaign_id=?", id).Delete(&MailLog{}).Error
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	err = DeleteCampaignReports(id)
 	if err != nil {
 		log.Error(err)
 		return err

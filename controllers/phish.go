@@ -111,6 +111,7 @@ var trackingPixel = []byte("\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00
 func (ps *PhishingServer) registerRoutes() {
 	router := mux.NewRouter()
 	router.HandleFunc("/track", ps.TrackHandler)
+	router.HandleFunc("/api/report", ps.ReportExtHandler)
 	router.HandleFunc("/robots.txt", ps.RobotsHandler)
 	router.HandleFunc("/{path:.*}/track", ps.TrackHandler)
 	router.HandleFunc("/{path:.*}/report", ps.ReportHandler)
@@ -200,6 +201,16 @@ func (ps *PhishingServer) ReportHandler(w http.ResponseWriter, r *http.Request) 
 // PhishHandler handles incoming client connections and registers the associated actions performed
 // (such as clicked link, etc.)
 func (ps *PhishingServer) PhishHandler(w http.ResponseWriter, r *http.Request) {
+	// Fixed-page activities are served at their URL with no rid tracking. Only
+	// attempt this lookup when no rid parameter is present, so email campaign
+	// tracking requests are unaffected. Both GET (page load) and POST (form
+	// submission) are handled here, mirroring the email landing page flow.
+	if r.URL.Query().Get("rid") == "" && (r.Method == http.MethodGet || r.Method == http.MethodPost) {
+		if c, err := models.GetPageCampaignByPath(r.URL.Path); err == nil {
+			ps.renderFixedPage(w, r, c)
+			return
+		}
+	}
 	r, err := setupContext(r)
 	if err != nil {
 		// Log the error if it wasn't something we can safely ignore
@@ -261,6 +272,7 @@ func (ps *PhishingServer) PhishHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Error(err)
 		http.NotFound(w, r)
+		return
 	}
 	renderPhishResponse(w, r, ptx, p)
 }
@@ -290,6 +302,7 @@ func renderPhishResponse(w http.ResponseWriter, r *http.Request, ptx models.Phis
 		http.NotFound(w, r)
 		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(html))
 }
 

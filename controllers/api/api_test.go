@@ -12,6 +12,7 @@ import (
 	"github.com/gophish/gophish/auth"
 	"github.com/gophish/gophish/config"
 	ctx "github.com/gophish/gophish/context"
+	"github.com/gophish/gophish/dialer"
 	"github.com/gophish/gophish/models"
 )
 
@@ -267,9 +268,9 @@ func TestGetCampaigns(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
-	cs := []models.Campaign{}
-	json.NewDecoder(w.Body).Decode(&cs)
-	if len(cs) == 0 {
+	pr := models.PagedResponse{}
+	json.NewDecoder(w.Body).Decode(&pr)
+	if pr.Total < 1 {
 		t.Fatal("expected at least one campaign")
 	}
 }
@@ -385,9 +386,9 @@ func TestGetGroups(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
-	gs := []models.Group{}
-	json.NewDecoder(w.Body).Decode(&gs)
-	if len(gs) == 0 {
+	pr := models.PagedResponse{}
+	json.NewDecoder(w.Body).Decode(&pr)
+	if pr.Total < 1 {
 		t.Fatal("expected at least one group")
 	}
 }
@@ -539,9 +540,9 @@ func TestGetTemplates(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
-	ts := []models.Template{}
-	json.NewDecoder(w.Body).Decode(&ts)
-	if len(ts) == 0 {
+	pr := models.PagedResponse{}
+	json.NewDecoder(w.Body).Decode(&pr)
+	if pr.Total < 1 {
 		t.Fatal("expected at least one template")
 	}
 }
@@ -638,9 +639,9 @@ func TestGetPages(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
-	ps := []models.Page{}
-	json.NewDecoder(w.Body).Decode(&ps)
-	if len(ps) == 0 {
+	pr := models.PagedResponse{}
+	json.NewDecoder(w.Body).Decode(&pr)
+	if pr.Total < 1 {
 		t.Fatal("expected at least one page")
 	}
 }
@@ -737,9 +738,9 @@ func TestGetSendingProfiles(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
-	ss := []models.SMTP{}
-	json.NewDecoder(w.Body).Decode(&ss)
-	if len(ss) == 0 {
+	pr := models.PagedResponse{}
+	json.NewDecoder(w.Body).Decode(&pr)
+	if pr.Total < 1 {
 		t.Fatal("expected at least one SMTP profile")
 	}
 }
@@ -970,7 +971,7 @@ func TestCampaignsSummary(t *testing.T) {
 	c.Groups = []models.Group{{Name: "Test Group"}}
 	models.PostCampaign(&c, 1)
 
-	r := httptest.NewRequest(http.MethodGet, "/api/campaigns/summary", nil)
+	r := httptest.NewRequest(http.MethodGet, "/api/campaigns/summary?pageNum=1&pageSize=10", nil)
 	r = ctx.Set(r, "user_id", int64(1))
 	w := httptest.NewRecorder()
 	tc.apiServer.CampaignsSummary(w, r)
@@ -978,10 +979,57 @@ func TestCampaignsSummary(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
-	cs := models.CampaignSummaries{}
-	json.NewDecoder(w.Body).Decode(&cs)
-	if cs.Total < 1 {
+	pr := models.PagedResponse{}
+	json.NewDecoder(w.Body).Decode(&pr)
+	if pr.Total < 1 {
 		t.Fatal("expected at least one campaign in summary")
+	}
+}
+
+func TestDashboardStats(t *testing.T) {
+	tc := setupTest(t)
+	createTestData(t)
+
+	c := models.Campaign{Name: "Dashboard Stats Test"}
+	c.UserId = 1
+	c.Template = models.Template{Name: "Test Template"}
+	c.Page = models.Page{Name: "Test Page"}
+	c.SMTP = models.SMTP{Name: "Test SMTP"}
+	c.Groups = []models.Group{{Name: "Test Group"}}
+	models.PostCampaign(&c, 1)
+
+	r := httptest.NewRequest(http.MethodGet, "/api/campaigns/dashboard-stats", nil)
+	r = ctx.Set(r, "user_id", int64(1))
+	w := httptest.NewRecorder()
+	tc.apiServer.DashboardStats(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", w.Code)
+	}
+	resp := models.DashboardStatsResponse{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp.Stats.Total < 1 {
+		t.Fatal("expected at least one result in dashboard stats")
+	}
+	if len(resp.Timeline) < 1 {
+		t.Fatal("expected at least one timeline entry")
+	}
+	// Verify running total backfill invariant
+	if resp.Stats.EmailsSent < resp.Stats.OpenedEmail {
+		t.Fatalf("EmailsSent (%d) should be >= OpenedEmail (%d)", resp.Stats.EmailsSent, resp.Stats.OpenedEmail)
+	}
+}
+
+func TestDashboardStatsMethodNotAllowed(t *testing.T) {
+	tc := setupTest(t)
+
+	r := httptest.NewRequest(http.MethodPost, "/api/campaigns/dashboard-stats", nil)
+	r = ctx.Set(r, "user_id", int64(1))
+	w := httptest.NewRecorder()
+	tc.apiServer.DashboardStats(w, r)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 got %d", w.Code)
 	}
 }
 
@@ -1013,6 +1061,11 @@ func TestSiteImportBaseHref(t *testing.T) {
 		w.Write([]byte(h))
 	}))
 	defer ts.Close()
+
+	// Temporarily allow localhost since the test server runs on 127.0.0.1
+	orig := dialer.DefaultDialer.AllowedHosts()
+	dialer.SetAllowedHosts([]string{"127.0.0.1"})
+	defer dialer.SetAllowedHosts(orig)
 
 	body := fmt.Sprintf(`{"url":"%s","include_resources":false}`, ts.URL)
 	r := httptest.NewRequest(http.MethodPost, "/api/import/site", bytes.NewBufferString(body))

@@ -54,7 +54,8 @@ func TestDefaultAllowedImport(t *testing.T) {
 		fmt.Fprintln(w, h)
 	}))
 	defer ts.Close()
-	response := makeImportRequest(ctx, []string{}, ts.URL)
+	// Allow localhost since the test server runs on 127.0.0.1
+	response := makeImportRequest(ctx, []string{"127.0.0.1"}, ts.URL)
 	expectedCode := http.StatusOK
 	if response.Code != expectedCode {
 		t.Fatalf("incorrect status code received. expected %d got %d", expectedCode, response.Code)

@@ -152,6 +152,98 @@ func (s *ModelsSuite) TestCampaignGetResults(c *check.C) {
 	c.Assert(len(campaign.Results), check.Equals, len(got.Results))
 }
 
+func (s *ModelsSuite) TestDashboardStatsEmpty(c *check.C) {
+	resp, err := GetDashboardStats(1)
+	c.Assert(err, check.Equals, nil)
+	c.Assert(resp.Stats.Total, check.Equals, int64(0))
+	c.Assert(resp.Stats.EmailsSent, check.Equals, int64(0))
+	c.Assert(resp.Stats.OpenedEmail, check.Equals, int64(0))
+	c.Assert(resp.Stats.ClickedLink, check.Equals, int64(0))
+	c.Assert(resp.Stats.SubmittedData, check.Equals, int64(0))
+	c.Assert(resp.Stats.EmailReported, check.Equals, int64(0))
+	c.Assert(resp.Stats.Error, check.Equals, int64(0))
+	c.Assert(len(resp.Timeline), check.Equals, 0)
+}
+
+func (s *ModelsSuite) TestDashboardStatsWithCampaigns(c *check.C) {
+	c1 := s.createCampaign(c)
+	_ = s.createCampaign(c) // second campaign for isolation testing
+
+	// Mark some results with different statuses to exercise the aggregation
+	var results []Result
+	err := db.Where("campaign_id = ?", c1.Id).Find(&results).Error
+	c.Assert(err, check.Equals, nil)
+	c.Assert(len(results) > 0, check.Equals, true)
+
+	// Set first result to "Email Sent"
+	err = db.Model(&results[0]).Update("status", EventSent).Error
+	c.Assert(err, check.Equals, nil)
+	// Set second result to "Email Opened"
+	if len(results) > 1 {
+		err = db.Model(&results[1]).Update("status", EventOpened).Error
+		c.Assert(err, check.Equals, nil)
+	}
+	// Set third result to "Clicked Link"
+	if len(results) > 2 {
+		err = db.Model(&results[2]).Update("status", EventClicked).Error
+		c.Assert(err, check.Equals, nil)
+	}
+	// Mark one as reported
+	if len(results) > 0 {
+		err = db.Model(&results[0]).Update("reported", true).Error
+		c.Assert(err, check.Equals, nil)
+	}
+
+	resp, err := GetDashboardStats(1)
+	c.Assert(err, check.Equals, nil)
+	// Should have timeline entries for both campaigns
+	c.Assert(len(resp.Timeline), check.Equals, 2)
+	// Total should be the sum of results from both campaigns
+	c.Assert(resp.Stats.Total > 0, check.Equals, true)
+
+	// Verify running total backfill: EmailsSent >= OpenedEmail >= ClickedLink >= SubmittedData
+	c.Assert(resp.Stats.EmailsSent >= resp.Stats.OpenedEmail, check.Equals, true)
+	c.Assert(resp.Stats.OpenedEmail >= resp.Stats.ClickedLink, check.Equals, true)
+	c.Assert(resp.Stats.ClickedLink >= resp.Stats.SubmittedData, check.Equals, true)
+
+	// Verify each timeline entry has correct structure
+	for _, entry := range resp.Timeline {
+		c.Assert(entry.Id > 0, check.Equals, true)
+		c.Assert(entry.Name != "", check.Equals, true)
+		c.Assert(entry.EmailsSent >= entry.OpenedEmail, check.Equals, true)
+		c.Assert(entry.OpenedEmail >= entry.ClickedLink, check.Equals, true)
+		c.Assert(entry.ClickedLink >= entry.SubmittedData, check.Equals, true)
+	}
+}
+
+func (s *ModelsSuite) TestDashboardStatsIsolation(c *check.C) {
+	// Create a campaign for user 1
+	s.createCampaign(c)
+
+	// User 2 should see no data
+	resp, err := GetDashboardStats(2)
+	c.Assert(err, check.Equals, nil)
+	c.Assert(resp.Stats.Total, check.Equals, int64(0))
+	c.Assert(len(resp.Timeline), check.Equals, 0)
+}
+
+func (s *ModelsSuite) TestDashboardStatsReported(c *check.C) {
+	campaign := s.createCampaign(c)
+	var results []Result
+	err := db.Where("campaign_id = ?", campaign.Id).Find(&results).Error
+	c.Assert(err, check.Equals, nil)
+	c.Assert(len(results) > 0, check.Equals, true)
+
+	// Mark first result as reported
+	err = db.Model(&results[0]).Update("reported", true).Error
+	c.Assert(err, check.Equals, nil)
+
+	resp, err := GetDashboardStats(1)
+	c.Assert(err, check.Equals, nil)
+	c.Assert(resp.Stats.EmailReported >= 1, check.Equals, true)
+	c.Assert(resp.Timeline[0].EmailReported >= 1, check.Equals, true)
+}
+
 func setupCampaignDependencies(b *testing.B, size int) {
 	group := Group{Name: "Test Group"}
 	// Create a large group of 5000 members
@@ -227,9 +319,9 @@ func BenchmarkCampaign100(b *testing.B) {
 			b.Fatalf("error posting campaign: %v", err)
 		}
 		b.StopTimer()
-		db.Delete(Result{})
-		db.Delete(MailLog{})
-		db.Delete(Campaign{})
+		db.Where("1=1").Delete(Result{})
+		db.Where("1=1").Delete(MailLog{})
+		db.Where("1=1").Delete(Campaign{})
 	}
 	tearDownBenchmark(b)
 }
@@ -252,9 +344,9 @@ func BenchmarkCampaign1000(b *testing.B) {
 			b.Fatalf("error posting campaign: %v", err)
 		}
 		b.StopTimer()
-		db.Delete(Result{})
-		db.Delete(MailLog{})
-		db.Delete(Campaign{})
+		db.Where("1=1").Delete(Result{})
+		db.Where("1=1").Delete(MailLog{})
+		db.Where("1=1").Delete(Campaign{})
 	}
 	tearDownBenchmark(b)
 }
@@ -277,9 +369,9 @@ func BenchmarkCampaign10000(b *testing.B) {
 			b.Fatalf("error posting campaign: %v", err)
 		}
 		b.StopTimer()
-		db.Delete(Result{})
-		db.Delete(MailLog{})
-		db.Delete(Campaign{})
+		db.Where("1=1").Delete(Result{})
+		db.Where("1=1").Delete(MailLog{})
+		db.Where("1=1").Delete(Campaign{})
 	}
 	tearDownBenchmark(b)
 }

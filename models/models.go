@@ -18,12 +18,61 @@ import (
 	"github.com/gophish/gophish/config"
 
 	log "github.com/gophish/gophish/logger"
-	"github.com/jinzhu/gorm"
-	_ "github.com/mattn/go-sqlite3" // Blank import needed to import sqlite3
+	gormmysql "gorm.io/driver/mysql"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 var db *gorm.DB
+var readerDB *gorm.DB // separate reader connection for SQLite read-write splitting
 var conf *config.Config
+
+// CloseDB closes both writer and reader database connections gracefully.
+// For SQLite, it explicitly triggers a WAL checkpoint (TRUNCATE mode) so
+// that all data in the WAL file is flushed to the main .db file.
+// The reader connection is closed first so that no open readers remain
+// when the checkpoint runs, allowing WAL truncation to succeed.
+func CloseDB() {
+	if db == nil {
+		return
+	}
+
+	// 1. Close the reader connection first so it releases the WAL read lock.
+	if readerDB != nil {
+		rSqlDB, err := readerDB.DB()
+		if err != nil {
+			log.Errorf("failed to get reader sql.DB: %v", err)
+		} else if err := rSqlDB.Close(); err != nil {
+			log.Errorf("failed to close reader database: %v", err)
+		} else {
+			log.Info("Reader database connection closed")
+		}
+		readerDB = nil
+	}
+
+	// 2. Explicit WAL checkpoint BEFORE closing the writer connection.
+	//    TRUNCATE mode resets the WAL file to zero bytes after checkpoint.
+	if conf != nil && conf.DBName != "mysql" {
+		if err := db.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error; err != nil {
+			log.Warnf("WAL checkpoint failed (non-fatal): %v", err)
+		} else {
+			log.Info("SQLite WAL checkpoint completed")
+		}
+	}
+
+	// 3. Close the main writer connection pool.
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Errorf("failed to get underlying sql.DB: %v", err)
+		return
+	}
+	if err := sqlDB.Close(); err != nil {
+		log.Errorf("failed to close writer database: %v", err)
+	} else {
+		log.Info("Writer database connection closed")
+	}
+}
 
 const MaxDatabaseConnectionAttempts int = 10
 
@@ -194,10 +243,21 @@ func Setup(c *config.Config) error {
 		}
 	}
 
-	// Open our database connection
+	// Open our database connection using GORM v2 drivers
 	i := 0
 	for {
-		db, err = gorm.Open(conf.DBName, getDBConnectionString(conf))
+		var gormConfig *gorm.Config
+		if conf.DBName == "mysql" {
+			gormConfig = &gorm.Config{
+				Logger: logger.Default.LogMode(logger.Silent),
+			}
+			db, err = gorm.Open(gormmysql.Open(getDBConnectionString(conf)), gormConfig)
+		} else {
+			gormConfig = &gorm.Config{
+				Logger: logger.Default.LogMode(logger.Silent),
+			}
+			db, err = gorm.Open(sqlite.Open(getDBConnectionString(conf)), gormConfig)
+		}
 		if err == nil {
 			break
 		}
@@ -209,15 +269,42 @@ func Setup(c *config.Config) error {
 		log.Warn("waiting for database to be up...")
 		time.Sleep(5 * time.Second)
 	}
-	db.LogMode(false)
-	db.SetLogger(log.Logger)
-	db.DB().SetMaxOpenConns(1)
+
+	// Get the underlying sql.DB for goose migrations and pool settings
+	sqlDB, err := db.DB()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
+	sqlDB.SetMaxOpenConns(1)
+
+	// For SQLite on-disk databases, set up read-write splitting via DBResolver.
+	// In-memory databases (used in tests) must NOT use DBResolver because each
+	// connection creates an independent :memory: database, causing the goose
+	// migration tables to be invisible to subsequent queries.
+	if conf.DBName != "mysql" && !strings.HasPrefix(conf.DBPath, ":memory:") {
+		// Open a separate reader connection for read-write splitting.
+		// This avoids the dbresolver plugin which creates internal *sql.DB pools
+		// that we cannot close — preventing WAL checkpoint on shutdown.
+		readDSN := getDBConnectionString(conf)
+		readerDB, err = gorm.Open(sqlite.Open(readDSN), &gorm.Config{
+			Logger: logger.Default.LogMode(logger.Silent),
+		})
+		if err != nil {
+			log.Errorf("failed to open reader database: %v", err)
+			return err
+		}
+		rSqlDB, err := readerDB.DB()
+		if err != nil {
+			log.Errorf("failed to get reader sql.DB: %v", err)
+			return err
+		}
+		rSqlDB.SetMaxOpenConns(1)
+		log.Info("SQLite read-write splitting enabled (separate reader connection)")
+	}
+
 	// Migrate up to the latest version
-	err = goose.RunMigrationsOnDb(migrateConf, migrateConf.MigrationsDir, latest, db.DB())
+	err = goose.RunMigrationsOnDb(migrateConf, migrateConf.MigrationsDir, latest, sqlDB)
 	if err != nil {
 		log.Error(err)
 		return err

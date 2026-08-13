@@ -9,7 +9,7 @@ import (
 	"time"
 
 	log "github.com/gophish/gophish/logger"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 	"github.com/oschwald/maxminddb-golang"
 )
 

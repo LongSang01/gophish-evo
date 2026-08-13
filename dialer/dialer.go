@@ -32,7 +32,9 @@ func (d *RestrictedDialer) AllowedHosts() []string {
 }
 
 // SetAllowedHosts sets the list of allowed hosts or IP ranges for the dialer.
+// It replaces any previously configured allowed hosts.
 func (d *RestrictedDialer) SetAllowedHosts(allowed []string) error {
+	d.allowedHosts = nil
 	for _, ipRange := range allowed {
 		// For flexibility, try to parse as an IP first since this will
 		// undoubtedly cause issues. If it works, then just append the
@@ -55,6 +57,9 @@ func (d *RestrictedDialer) SetAllowedHosts(allowed []string) error {
 
 // Dialer returns a net.Dialer that restricts outbound connections to only the
 // addresses allowed by the DefaultDialer.
+// By default, all internal/private IP ranges are blocked (loopback, RFC1918,
+// link-local, cloud metadata, etc.) to mitigate SSRF attacks. Operators can
+// selectively allow specific internal hosts via SetAllowedHosts().
 func Dialer() *net.Dialer {
 	return DefaultDialer.Dialer()
 }
@@ -79,11 +84,11 @@ func (d *RestrictedDialer) Dialer() *net.Dialer {
 	}
 }
 
-// defaultDeny represents the list of IP ranges that we want to block unless
-// explicitly overriden.
-var defaultDeny = []string{
-	"169.254.0.0/16", // Link-local (used for VPS instance metadata)
-}
+// defaultDeny represents the list of IP ranges that we want to block.
+// By default all internal/private ranges are blocked to prevent SSRF.
+// When allowedHosts is configured, the allInternal list is used instead
+// and only those hosts are allowed through.
+var defaultDeny = allInternal
 
 // allInternal represents all internal hosts such that the only connections
 // allowed are external ones.
@@ -101,11 +106,7 @@ var allInternal = []string{
 	"224.0.0.0/4",        // Multicast
 	"240.0.0.0/4",        // Reserved
 	"255.255.255.255/32", // Broadcast
-	"::/0",               // Default route
-	"::/128",             // Unspecified address
 	"::1/128",            // IPv6 loopback
-	"::ffff:0:0/96",      // IPv4 mapped addresses.
-	"::ffff:0:0:0/96",    // IPv4 translated addresses.
 	"fe80::/10",          // IPv6 link-local
 	"fc00::/7",           // IPv6 unique local addr
 }

@@ -148,5 +148,8 @@ func main() {
 	if *mode == modePhish || *mode == modeAll {
 		phishServer.Shutdown()
 	}
+	// Close database connections gracefully to trigger WAL checkpoint
+	models.CloseDB()
+	log.Info("Shutdown complete")
 	models.CloseGeoDatabase()
 }

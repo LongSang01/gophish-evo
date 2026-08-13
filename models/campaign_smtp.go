@@ -2,7 +2,7 @@ package models
 
 import (
 	log "github.com/gophish/gophish/logger"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 )
 
 // CampaignSMTP is a join table that maps a campaign to multiple sending
@@ -73,7 +73,7 @@ func GetCampaignSMTPRecords(campaignId int64, uid int64) ([]SMTP, error) {
 	smtps := make([]SMTP, 0, len(csmtps))
 	for _, cs := range csmtps {
 		s := SMTP{}
-		err := db.Where("id=? AND user_id=?", cs.SMTPId, uid).Find(&s).Error
+		err := db.Where("id=? AND user_id=?", cs.SMTPId, uid).First(&s).Error
 		if err != nil {
 			if err == gorm.ErrRecordNotFound {
 				continue

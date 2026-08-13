@@ -32,21 +32,29 @@ func (s *ModelsSuite) SetUpSuite(c *check.C) {
 func (s *ModelsSuite) TearDownTest(c *check.C) {
 	// Clear database tables between each test. If new tables are
 	// used in this test suite they will need to be cleaned up here.
-	db.Delete(Group{})
-	db.Delete(Target{})
-	db.Delete(GroupTarget{})
-	db.Delete(SMTP{})
-	db.Delete(Page{})
-	db.Delete(Result{})
-	db.Delete(MailLog{})
-	db.Delete(Campaign{})
-	db.Delete(CampaignSMTP{})
-	db.Delete(IMAP{})
-	db.Delete(Webhook{})
+	// GORM v2 requires explicit WHERE clause for Delete to prevent
+	// accidental full-table deletes.
+	db.Where("1=1").Delete(Group{})
+	db.Where("1=1").Delete(Target{})
+	db.Where("1=1").Delete(GroupTarget{})
+	db.Where("1=1").Delete(SMTP{})
+	db.Where("1=1").Delete(Page{})
+	db.Where("1=1").Delete(Template{})
+	db.Where("1=1").Delete(Attachment{})
+	db.Where("1=1").Delete(Result{})
+	db.Where("1=1").Delete(MailLog{})
+	db.Where("1=1").Delete(Campaign{})
+	db.Where("1=1").Delete(CampaignSMTP{})
+	db.Where("1=1").Delete(IMAP{})
+	db.Where("1=1").Delete(Webhook{})
+	db.Where("1=1").Delete(Event{})
+	db.Where("1=1").Delete(EmailRequest{})
 
 	// Reset users table to default state.
-	db.Not("id", 1).Delete(User{})
-	db.Model(User{}).Update("username", "admin")
+	db.Where("id != 1").Delete(User{})
+	db.Model(User{}).Where("1=1").Update("username", "admin")
+	// NOTE: Permission and Role tables are NOT cleared — they contain
+	// static seed data inserted by migrations and must persist.
 }
 
 func (s *ModelsSuite) createCampaignDependencies(ch *check.C, optional ...string) Campaign {
@@ -120,23 +128,27 @@ func setupBenchmark(b *testing.B) {
 }
 
 func tearDownBenchmark(b *testing.B) {
-	err := db.Close()
+	sqlDB, err := db.DB()
+	if err != nil {
+		b.Fatalf("error getting underlying sql.DB: %v", err)
+	}
+	err = sqlDB.Close()
 	if err != nil {
 		b.Fatalf("error closing database: %v", err)
 	}
 }
 
 func resetBenchmark(b *testing.B) {
-	db.Delete(Group{})
-	db.Delete(Target{})
-	db.Delete(GroupTarget{})
-	db.Delete(SMTP{})
-	db.Delete(Page{})
-	db.Delete(Result{})
-	db.Delete(MailLog{})
-	db.Delete(Campaign{})
+	db.Where("1=1").Delete(Group{})
+	db.Where("1=1").Delete(Target{})
+	db.Where("1=1").Delete(GroupTarget{})
+	db.Where("1=1").Delete(SMTP{})
+	db.Where("1=1").Delete(Page{})
+	db.Where("1=1").Delete(Result{})
+	db.Where("1=1").Delete(MailLog{})
+	db.Where("1=1").Delete(Campaign{})
 
 	// Reset users table to default state.
-	db.Not("id", 1).Delete(User{})
-	db.Model(User{}).Update("username", "admin")
+	db.Where("id != 1").Delete(User{})
+	db.Model(User{}).Where("1=1").Update("username", "admin")
 }

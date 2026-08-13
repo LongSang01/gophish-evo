@@ -45,16 +45,23 @@ func TestGetUsers(t *testing.T) {
 		t.Fatalf("unexpected error code received. expected %d got %d", expected, w.Code)
 	}
 
-	got := []models.User{}
-	err := json.NewDecoder(w.Body).Decode(&got)
+	pr := models.PagedResponse{}
+	err := json.NewDecoder(w.Body).Decode(&pr)
 	if err != nil {
 		t.Fatalf("error decoding users data: %v", err)
 	}
 
 	// We only expect one user
-	expectedUsers := 1
-	if len(got) != expectedUsers {
-		t.Fatalf("unexpected number of users returned. expected %d got %d", expectedUsers, len(got))
+	expectedUsers := int64(1)
+	if pr.Total != expectedUsers {
+		t.Fatalf("unexpected number of users returned. expected %d got %d", expectedUsers, pr.Total)
+	}
+	// Decode the data array
+	dataBytes, _ := json.Marshal(pr.Data)
+	var got []models.User
+	json.Unmarshal(dataBytes, &got)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 user in data, got %d", len(got))
 	}
 	// And it should be the admin user
 	if testCtx.admin.Id != got[0].Id {

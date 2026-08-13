@@ -9,7 +9,7 @@ import (
 	log "github.com/gophish/gophish/logger"
 	"github.com/gophish/gophish/models"
 	"github.com/gorilla/mux"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 )
 
 // Campaigns returns a list of campaigns if requested via GET.
@@ -39,7 +39,7 @@ func (as *Server) Campaigns(w http.ResponseWriter, r *http.Request) {
 		}
 		// If the campaign is scheduled to launch immediately, send it to the worker.
 		// Otherwise, the worker will pick it up at the scheduled time
-		if c.Status == models.CampaignInProgress {
+		if c.Status == models.CampaignInProgress && c.SourceType != models.SourceTypeClient && c.SourceType != models.SourceTypePage {
 			go as.worker.LaunchCampaign(c)
 		}
 		JSONResponse(w, c, http.StatusCreated)
@@ -57,8 +57,24 @@ func (as *Server) CampaignsSummary(w http.ResponseWriter, r *http.Request) {
 			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
 			return
 		}
-		JSONResponse(w, cs, http.StatusOK)
+		pagedJSONResponse(w, http.StatusOK, pp, cs.Campaigns, cs.Total)
 	}
+}
+
+// DashboardStats returns lightweight aggregated stats for dashboard charts,
+// avoiding the N+1 query problem of loading all campaign details.
+func (as *Server) DashboardStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		return
+	}
+	resp, err := models.GetDashboardStats(ctx.Get(r, "user_id").(int64))
+	if err != nil {
+		log.Error(err)
+		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+		return
+	}
+	JSONResponse(w, resp, http.StatusOK)
 }
 
 // Campaign returns details about the requested campaign. If the campaign is not
@@ -151,6 +167,10 @@ func (as *Server) CampaignLaunch(w http.ResponseWriter, r *http.Request) {
 	c, err := models.GetCampaign(id, uid)
 	if err != nil {
 		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+		return
+	}
+	if c.SourceType != models.SourceTypeEmail {
+		JSONResponse(w, models.Response{Success: false, Message: "Only email campaigns can be launched"}, http.StatusBadRequest)
 		return
 	}
 	if c.Status != models.CampaignScheduled && c.Status != models.CampaignQueued {

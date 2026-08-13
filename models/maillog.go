@@ -17,7 +17,7 @@ import (
 	"github.com/gophish/gophish/config"
 	log "github.com/gophish/gophish/logger"
 	"github.com/gophish/gophish/mailer"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 )
 
 // MaxSendAttempts set to 8 since we exponentially backoff after each failed send
@@ -436,7 +436,7 @@ func lockMailLogsChunked(tx *gorm.DB, ids []int64, lock bool) error {
 // in the database. This is intended to be called when Gophish is started
 // so that any previously locked maillogs can resume processing.
 func UnlockAllMailLogs() error {
-	return db.Model(&MailLog{}).Update("processing", false).Error
+	return db.Model(&MailLog{}).Where("1 = 1").Update("processing", false).Error
 }
 
 var maxBigInt = big.NewInt(math.MaxInt64)

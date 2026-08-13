@@ -1,15 +1,25 @@
-import { defHttp } from '@/utils/http';
+import { defHttp } from "@/utils/http";
 
 enum Api {
-  Campaigns = '/campaigns',
+  Campaigns = "/campaigns",
 }
 
-export function getCampaigns(params?: { pageNum?: number; pageSize?: number }): Promise<any> {
+export function getCampaigns(params?: {
+  pageNum?: number;
+  pageSize?: number;
+}): Promise<any> {
   return defHttp.get({ url: `${Api.Campaigns}/`, params });
 }
 
-export function getCampaignSummaries(params?: { pageNum?: number; pageSize?: number }): Promise<any> {
+export function getCampaignSummaries(params?: {
+  pageNum?: number;
+  pageSize?: number;
+}): Promise<any> {
   return defHttp.get({ url: `${Api.Campaigns}/summary`, params });
+}
+
+export function getDashboardStats(): Promise<any> {
+  return defHttp.get({ url: `${Api.Campaigns}/dashboard-stats` });
 }
 
 export function getCampaign(id: number): Promise<any> {
@@ -36,6 +46,31 @@ export function getCampaignSummary(id: number): Promise<any> {
   return defHttp.get({ url: `${Api.Campaigns}/${id}/summary` });
 }
 
-export function getCampaignResults(id: number, params?: { pageNum?: number; pageSize?: number }): Promise<any> {
+export function getCampaignResults(
+  id: number,
+  params?: { pageNum?: number; pageSize?: number },
+): Promise<any> {
   return defHttp.get({ url: `${Api.Campaigns}/${id}/results`, params });
+}
+
+export function getClientCode(id: number): Promise<any> {
+  return defHttp.get({ url: `${Api.Campaigns}/${id}/client/code` });
+}
+
+export function getPageURL(id: number): Promise<any> {
+  return defHttp.get({ url: `${Api.Campaigns}/${id}/page/url` });
+}
+
+export function getCampaignReports(
+  id: number,
+  params?: { pageNum?: number; pageSize?: number },
+): Promise<any> {
+  return defHttp.get({ url: `${Api.Campaigns}/${id}/reports`, params });
+}
+
+export function exportCampaignReports(id: number): Promise<void> {
+  return defHttp.get({
+    url: `${Api.Campaigns}/${id}/reports/export`,
+    responseType: "blob",
+  });
 }

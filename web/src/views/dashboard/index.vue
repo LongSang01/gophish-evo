@@ -36,9 +36,10 @@
             :columns="columns"
             :data-source="campaigns"
             :loading="loading"
-            :pagination="{ pageSize: 10 }"
+            :pagination="pagination"
             row-key="id"
             size="small"
+            @change="(pag: any) => { pagination.current = pag.current; pagination.pageSize = pag.pageSize; loadTableData(); }"
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'created_date'">
@@ -66,13 +67,25 @@ import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { message, Modal } from 'ant-design-vue';
 import * as echarts from 'echarts';
-import { getCampaignSummaries, deleteCampaign } from '@/api/campaigns';
+import { getDashboardStats, getCampaignSummaries, deleteCampaign } from '@/api/campaigns';
 
 const router = useRouter();
 const loading = ref(false);
 const campaigns = ref<any[]>([]);
 const timelineChart = ref<HTMLElement | null>(null);
 const chartRefs = reactive<Record<string, HTMLElement | null>>({});
+const pagination = reactive({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+  showSizeChanger: true,
+  showTotal: (total: number) => `共 ${total} 条`,
+  onChange: (page: number, pageSize: number) => {
+    pagination.current = page;
+    pagination.pageSize = pageSize;
+    loadTableData();
+  },
+});
 
 const statsMapping: Record<string, string> = {
   sent: '已发送',
@@ -109,38 +122,52 @@ const columns = [
 ];
 
 onMounted(async () => {
-  await loadData();
+  await Promise.all([loadStats(), loadTableData()]);
 });
 
-async function loadData() {
-  loading.value = true;
+async function loadStats() {
   try {
-    const result = await getCampaignSummaries();
-    const allCampaigns: any[] = result.campaigns || [];
-    campaigns.value = allCampaigns.sort(
-      (a: any, b: any) => new Date(b.created_date || 0).getTime() - new Date(a.created_date || 0).getTime()
-    );
-    if (allCampaigns.length > 0) {
-      generateStatCharts(allCampaigns);
-      generateTimelineChart(allCampaigns);
+    const result = await getDashboardStats();
+    const stats = result.stats || {};
+    const timeline = result.timeline || [];
+    if (Object.keys(stats).length > 0) {
+      generateStatCharts(stats);
+    }
+    if (timeline.length > 0) {
+      generateTimelineChart(timeline);
     }
   } catch (error) {
-    message.error('加载数据失败');
+    message.error('加载统计数据失败');
+  }
+}
+
+async function loadTableData() {
+  loading.value = true;
+  try {
+    const result = await getCampaignSummaries({
+      pageNum: pagination.current,
+      pageSize: pagination.pageSize,
+    });
+    const data = result.data || result.campaigns || result || [];
+    const total = result.total ?? data.length;
+    campaigns.value = Array.isArray(data) ? data : [];
+    pagination.total = total;
+  } catch (error) {
+    message.error('加载活动数据失败');
   } finally {
     loading.value = false;
   }
 }
 
-function generateStatCharts(allCampaigns: any[]) {
-  const agg: Record<string, number> = { sent: 0, opened: 0, clicked: 0, submitted_data: 0, email_reported: 0 };
-  let total = 0;
-  for (const c of allCampaigns) {
-    const s = c.stats || {};
-    for (const key of Object.keys(agg)) {
-      agg[key] += s[key] || 0;
-    }
-    total += s.total || 0;
-  }
+function generateStatCharts(stats: Record<string, number>) {
+  const agg: Record<string, number> = {
+    sent: stats.sent || 0,
+    opened: stats.opened || 0,
+    clicked: stats.clicked || 0,
+    submitted_data: stats.submitted_data || 0,
+    email_reported: stats.email_reported || 0,
+  };
+  const total = stats.total || 0;
   statCharts.value = Object.keys(agg).map(key => ({
     key,
     label: statsMapping[key] || key,
@@ -171,15 +198,14 @@ function generateStatCharts(allCampaigns: any[]) {
   }, 100);
 }
 
-function generateTimelineChart(allCampaigns: any[]) {
+function generateTimelineChart(timeline: any[]) {
   if (!timelineChart.value) return;
-  const sorted = [...allCampaigns].sort(
+  const sorted = [...timeline].sort(
     (a, b) => new Date(a.created_date).getTime() - new Date(b.created_date).getTime()
   );
   const data = sorted.map(c => {
-    const stats = c.stats || {};
-    const total = stats.total || 1;
-    const clickRate = Math.floor(((stats.clicked || 0) / total) * 100);
+    const total = c.total || 1;
+    const clickRate = Math.floor(((c.clicked || 0) / total) * 100);
     return {
       value: [new Date(c.created_date).getTime(), clickRate],
       campaign_id: c.id,
@@ -229,7 +255,7 @@ function handleDelete(campaign: any) {
       try {
         await deleteCampaign(campaign.id);
         message.success('删除成功');
-        loadData();
+        Promise.all([loadStats(), loadTableData()]);
       } catch (error) {
         message.error('删除失败');
       }

@@ -88,7 +88,7 @@ func EnsureEnoughAdmins() error {
 	if err != nil {
 		return err
 	}
-	var adminCount int
+	var adminCount int64
 	err = db.Model(&User{}).Where("role_id=?", role.ID).Count(&adminCount).Error
 	if err != nil {
 		return err
@@ -114,17 +114,10 @@ func DeleteUser(id int64) error {
 			return err
 		}
 	}
-	campaigns, _, err := GetCampaigns(id, PageParams{})
-	if err != nil {
-		return err
-	}
 	// Delete the campaigns
 	log.Infof("Deleting campaigns for user ID %d", id)
-	for _, campaign := range campaigns {
-		err = DeleteCampaign(campaign.Id)
-		if err != nil {
-			return err
-		}
+	if err = deleteAllCampaignsForUser(id); err != nil {
+		return err
 	}
 	log.Infof("Deleting pages for user ID %d", id)
 	// Delete the landing pages

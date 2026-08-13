@@ -9,7 +9,7 @@ import (
 	ctx "github.com/gophish/gophish/context"
 	log "github.com/gophish/gophish/logger"
 	"github.com/gophish/gophish/models"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 	"github.com/sirupsen/logrus"
 )
 
@@ -21,14 +21,14 @@ const DefaultPageSize = 10
 const MaxPageSize = 100
 
 // parsePagination extracts server-side pagination parameters (pageNum,
-// pageSize) from the request query string. When pageSize is absent the
-// returned PageParams is non-valid, meaning the full result set is returned.
+// pageSize) from the request query string. When parameters are absent or
+// invalid, sensible defaults are applied so that pagination is always active.
 func parsePagination(r *http.Request) models.PageParams {
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("pageNum"))
 	pageSize, _ := strconv.Atoi(q.Get("pageSize"))
 	if pageSize <= 0 {
-		return models.PageParams{}
+		pageSize = DefaultPageSize
 	}
 	if pageSize > MaxPageSize {
 		pageSize = MaxPageSize
@@ -39,14 +39,8 @@ func parsePagination(r *http.Request) models.PageParams {
 	return models.PageParams{Page: page, PageSize: pageSize}
 }
 
-// pagedJSONResponse writes either a bare collection (when not paginating) or a
-// {total, data} wrapper (when a page was requested) so that legacy un-paginated
-// consumers continue to work unchanged.
+// pagedJSONResponse writes a {total, data} wrapper for paginated responses.
 func pagedJSONResponse(w http.ResponseWriter, status int, pp models.PageParams, items interface{}, total int64) {
-	if !pp.Valid() {
-		JSONResponse(w, items, status)
-		return
-	}
 	JSONResponse(w, models.PagedResponse{Total: total, Data: items}, status)
 }
 
