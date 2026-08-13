@@ -92,9 +92,14 @@
             <a-select
               v-model:value="formData.template_id"
               placeholder="选择邮件模板"
+              :loading="tplPage.loading"
+              @popupScroll="(e: any) => handleDropdownScroll(e, tplPage, loadMoreTemplates)"
             >
               <a-select-option v-for="t in templates" :key="t.id" :value="t.id">
                 {{ t.name }}
+              </a-select-option>
+              <a-select-option v-if="tplPage.loading" disabled key="__loading_tpl__">
+                加载中...
               </a-select-option>
             </a-select>
           </a-form-item>
@@ -103,9 +108,14 @@
               v-model:value="formData.group_ids"
               mode="multiple"
               placeholder="选择目标用户组"
+              :loading="grpPage.loading"
+              @popupScroll="(e: any) => handleDropdownScroll(e, grpPage, loadMoreGroups)"
             >
               <a-select-option v-for="g in groups" :key="g.id" :value="g.id">
                 {{ g.name }}
+              </a-select-option>
+              <a-select-option v-if="grpPage.loading" disabled key="__loading_grp__">
+                加载中...
               </a-select-option>
             </a-select>
           </a-form-item>
@@ -114,6 +124,8 @@
               v-model:value="formData.smtp_ids"
               mode="multiple"
               placeholder="选择一个或多个SMTP配置"
+              :loading="smtpPage.loading"
+              @popupScroll="(e: any) => handleDropdownScroll(e, smtpPage, loadMoreSmtp)"
             >
               <a-select-option
                 v-for="s in smtpProfiles"
@@ -122,15 +134,23 @@
               >
                 {{ s.name }}
               </a-select-option>
+              <a-select-option v-if="smtpPage.loading" disabled key="__loading_smtp__">
+                加载中...
+              </a-select-option>
             </a-select>
           </a-form-item>
           <a-form-item label="落地页">
             <a-select
               v-model:value="formData.page_id"
               placeholder="选择落地页（可选）"
+              :loading="pgPage.loading"
+              @popupScroll="(e: any) => handleDropdownScroll(e, pgPage, loadMorePages)"
             >
               <a-select-option v-for="p in pages" :key="p.id" :value="p.id">
                 {{ p.name }}
+              </a-select-option>
+              <a-select-option v-if="pgPage.loading" disabled key="__loading_pg__">
+                加载中...
               </a-select-option>
             </a-select>
           </a-form-item>
@@ -243,9 +263,17 @@
 
         <template v-if="formData.source_type === 'page'">
           <a-form-item label="落地页" required>
-            <a-select v-model:value="formData.page_id" placeholder="选择落地页">
+            <a-select
+              v-model:value="formData.page_id"
+              placeholder="选择落地页"
+              :loading="pgPage.loading"
+              @popupScroll="(e: any) => handleDropdownScroll(e, pgPage, loadMorePages)"
+            >
               <a-select-option v-for="p in pages" :key="p.id" :value="p.id">
                 {{ p.name }}
+              </a-select-option>
+              <a-select-option v-if="pgPage.loading" disabled key="__loading_pg2__">
+                加载中...
               </a-select-option>
             </a-select>
           </a-form-item>
@@ -302,6 +330,22 @@ const smtpProfiles = ref<any[]>([]);
 const pages = ref<any[]>([]);
 const createModalVisible = ref(false);
 const isDuplicate = ref(false);
+
+// 下拉框分页状态
+interface DropdownPageState {
+  current: number;
+  pageSize: number;
+  total: number;
+  loading: boolean;
+  noMore: boolean;
+}
+function newDropdownPage(): DropdownPageState {
+  return { current: 1, pageSize: 20, total: 0, loading: false, noMore: false };
+}
+const tplPage = reactive(newDropdownPage());
+const grpPage = reactive(newDropdownPage());
+const smtpPage = reactive(newDropdownPage());
+const pgPage = reactive(newDropdownPage());
 const pagination = reactive({
   current: 1,
   pageSize: 10,
@@ -451,16 +495,102 @@ async function loadCampaigns() {
 
 async function loadDropdownData() {
   const results = await Promise.allSettled([
-    getTemplates(),
-    getGroups(),
-    getSMTPProfiles(),
-    getPages(),
+    getTemplates({ pageNum: 1, pageSize: tplPage.pageSize }),
+    getGroups({ pageNum: 1, pageSize: grpPage.pageSize }),
+    getSMTPProfiles({ pageNum: 1, pageSize: smtpPage.pageSize }),
+    getPages({ pageNum: 1, pageSize: pgPage.pageSize }),
   ]);
-  templates.value = results[0].status === "fulfilled" ? results[0].value : [];
-  groups.value = results[1].status === "fulfilled" ? results[1].value : [];
-  smtpProfiles.value =
-    results[2].status === "fulfilled" ? results[2].value : [];
-  pages.value = results[3].status === "fulfilled" ? results[3].value : [];
+  // 分页接口返回 { total, data } 格式，需要提取 data 字段
+  const extractPage = (result: any, page: DropdownPageState) => {
+    if (result.status === "fulfilled") {
+      const val = result.value;
+      const items = Array.isArray(val) ? val : val?.data ?? [];
+      page.total = Array.isArray(val) ? items.length : (val?.total ?? items.length);
+      page.noMore = items.length < page.pageSize;
+      return items;
+    }
+    page.noMore = true;
+    return [];
+  };
+  templates.value = extractPage(results[0], tplPage);
+  groups.value = extractPage(results[1], grpPage);
+  smtpProfiles.value = extractPage(results[2], smtpPage);
+  pages.value = extractPage(results[3], pgPage);
+}
+
+// 下拉框滚动加载下一页
+function handleDropdownScroll(
+  e: any,
+  page: DropdownPageState,
+  loadMore: () => Promise<void>,
+) {
+  const { target } = e;
+  // 距离底部 10px 时触发加载
+  if (target.scrollHeight - target.scrollTop - target.clientHeight < 10) {
+    if (!page.loading && !page.noMore) {
+      loadMore();
+    }
+  }
+}
+
+async function loadMoreTemplates() {
+  tplPage.loading = true;
+  try {
+    tplPage.current++;
+    const result = await getTemplates({ pageNum: tplPage.current, pageSize: tplPage.pageSize });
+    const items = Array.isArray(result) ? result : result?.data ?? [];
+    templates.value = [...templates.value, ...items];
+    tplPage.noMore = items.length < tplPage.pageSize;
+  } catch {
+    tplPage.current--;
+  } finally {
+    tplPage.loading = false;
+  }
+}
+
+async function loadMoreGroups() {
+  grpPage.loading = true;
+  try {
+    grpPage.current++;
+    const result = await getGroups({ pageNum: grpPage.current, pageSize: grpPage.pageSize });
+    const items = Array.isArray(result) ? result : result?.data ?? [];
+    groups.value = [...groups.value, ...items];
+    grpPage.noMore = items.length < grpPage.pageSize;
+  } catch {
+    grpPage.current--;
+  } finally {
+    grpPage.loading = false;
+  }
+}
+
+async function loadMoreSmtp() {
+  smtpPage.loading = true;
+  try {
+    smtpPage.current++;
+    const result = await getSMTPProfiles({ pageNum: smtpPage.current, pageSize: smtpPage.pageSize });
+    const items = Array.isArray(result) ? result : result?.data ?? [];
+    smtpProfiles.value = [...smtpProfiles.value, ...items];
+    smtpPage.noMore = items.length < smtpPage.pageSize;
+  } catch {
+    smtpPage.current--;
+  } finally {
+    smtpPage.loading = false;
+  }
+}
+
+async function loadMorePages() {
+  pgPage.loading = true;
+  try {
+    pgPage.current++;
+    const result = await getPages({ pageNum: pgPage.current, pageSize: pgPage.pageSize });
+    const items = Array.isArray(result) ? result : result?.data ?? [];
+    pages.value = [...pages.value, ...items];
+    pgPage.noMore = items.length < pgPage.pageSize;
+  } catch {
+    pgPage.current--;
+  } finally {
+    pgPage.loading = false;
+  }
 }
 
 function handleTableChange(pag: any) {
@@ -474,9 +604,18 @@ function resetPagination() {
   loadCampaigns();
 }
 
+function resetDropdownPages() {
+  Object.assign(tplPage, newDropdownPage());
+  Object.assign(grpPage, newDropdownPage());
+  Object.assign(smtpPage, newDropdownPage());
+  Object.assign(pgPage, newDropdownPage());
+}
+
 function showCreateModal() {
   formData.value = defaultCampaignForm();
   isDuplicate.value = false;
+  resetDropdownPages();
+  loadDropdownData();
   createModalVisible.value = true;
 }
 
@@ -490,6 +629,8 @@ async function handleCopyCampaign(campaign: any) {
     const fullCampaign = await getCampaign(campaign.id);
     fillDuplicateForm(fullCampaign);
     isDuplicate.value = true;
+    resetDropdownPages();
+    await loadDropdownData();
     createModalVisible.value = true;
   } catch (error) {
     message.error("加载活动数据失败");

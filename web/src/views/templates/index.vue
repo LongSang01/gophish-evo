@@ -191,6 +191,8 @@
           <a-select
             v-model:value="testSendForm.smtp_name"
             placeholder="选择SMTP发送配置"
+            :loading="smtpPage.loading"
+            @popupScroll="handleSmtpScroll"
           >
             <a-select-option
               v-for="s in smtpProfiles"
@@ -198,6 +200,9 @@
               :value="s.name"
             >
               {{ s.name }}
+            </a-select-option>
+            <a-select-option v-if="smtpPage.loading" disabled key="__loading__">
+              加载中...
             </a-select-option>
           </a-select>
         </a-form-item>
@@ -290,6 +295,7 @@ const attachmentColumns = [
 ];
 
 const smtpProfiles = ref<any[]>([]);
+const smtpPage = reactive({ current: 1, pageSize: 20, total: 0, loading: false, noMore: false });
 const testSendVisible = ref(false);
 const testSending = ref(false);
 const testSendForm = ref({ smtp_name: "", to: "" });
@@ -408,9 +414,39 @@ function resetPagination() {
 
 async function loadSMTPProfiles() {
   try {
-    smtpProfiles.value = await getSMTPProfiles();
+    smtpPage.current = 1;
+    smtpPage.noMore = false;
+    const result = await getSMTPProfiles({ pageNum: 1, pageSize: smtpPage.pageSize });
+    const items = Array.isArray(result) ? result : result?.data ?? [];
+    smtpProfiles.value = items;
+    smtpPage.total = Array.isArray(result) ? items.length : (result?.total ?? items.length);
+    smtpPage.noMore = items.length < smtpPage.pageSize;
   } catch (error) {
     // silent
+  }
+}
+
+function handleSmtpScroll(e: any) {
+  const { target } = e;
+  if (target.scrollHeight - target.scrollTop - target.clientHeight < 10) {
+    if (!smtpPage.loading && !smtpPage.noMore) {
+      loadMoreSmtp();
+    }
+  }
+}
+
+async function loadMoreSmtp() {
+  smtpPage.loading = true;
+  try {
+    smtpPage.current++;
+    const result = await getSMTPProfiles({ pageNum: smtpPage.current, pageSize: smtpPage.pageSize });
+    const items = Array.isArray(result) ? result : result?.data ?? [];
+    smtpProfiles.value = [...smtpProfiles.value, ...items];
+    smtpPage.noMore = items.length < smtpPage.pageSize;
+  } catch {
+    smtpPage.current--;
+  } finally {
+    smtpPage.loading = false;
   }
 }
 
