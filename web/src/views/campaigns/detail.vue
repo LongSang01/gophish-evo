@@ -630,6 +630,14 @@ function buildReportColumns() {
       key: "click_count",
       width: 100,
     });
+    cols.push({
+      title: "User-Agent",
+      dataIndex: "user_agent",
+      key: "user_agent",
+      width: 200,
+      ellipsis: true,
+      customRender: ({ record }: any) => record.user_agent || "—",
+    });
   }
 
   cols.push({

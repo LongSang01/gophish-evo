@@ -160,8 +160,12 @@ func (ps *PhishingServer) renderFixedPage(w http.ResponseWriter, r *http.Request
 	vid := readOrCreateVisitorID(w, r, urlPath)
 
 	if r.Method == http.MethodGet {
-		// Record a page open in the in-memory counter.
-		models.ClickCounter.Incr(c.Id, vid)
+		// Record a page open in the in-memory counter. IP and User-Agent are
+		// captured so click-only visitors still show this context in the
+		// report timeline.
+		ip := extractClientIP(r)
+		ua := r.Header.Get("User-Agent")
+		models.ClickCounter.Incr(c.Id, vid, ip, ua)
 	}
 	if r.Method == http.MethodPost {
 		if err := r.ParseForm(); err != nil {

@@ -10,11 +10,15 @@ import (
 // PageClickStats holds aggregated click counts for page-type campaigns,
 // keyed by (campaign_id, vid). Flushed from memory to the database
 // periodically to avoid per-request writes on a single SQLite connection.
+// IP and UserAgent reflect the most recently seen values for the visitor,
+// so click-only visitors still show context in the report timeline.
 type PageClickStats struct {
 	Id          int64     `json:"id" gorm:"primaryKey"`
 	CampaignId  int64     `json:"campaign_id"`
 	Vid         string    `json:"vid"`
 	ClickCount  int64     `json:"click_count"`
+	IP          string    `json:"ip"`
+	UserAgent   string    `json:"user_agent"`
 	FirstSeenAt time.Time `json:"first_seen_at"`
 	LastSeenAt  time.Time `json:"last_seen_at"`
 }
@@ -27,6 +31,8 @@ func (PageClickStats) TableName() string {
 // clickEntry is the in-memory accumulator for a single (campaign_id, vid) pair.
 type clickEntry struct {
 	count      int64
+	ip         string // most recently seen IP
+	userAgent  string // most recently seen User-Agent
 	lastSeenAt time.Time
 }
 
@@ -53,8 +59,9 @@ type clickCounter struct {
 }
 
 // Incr records a single page open event in memory. It is safe for concurrent
-// use. This function does NOT touch the database.
-func (cc *clickCounter) Incr(campaignID int64, vid string) {
+// use. This function does NOT touch the database. ip and ua are the most
+// recently seen client IP / User-Agent for the visitor.
+func (cc *clickCounter) Incr(campaignID int64, vid, ip, ua string) {
 	if vid == "" {
 		return
 	}
@@ -68,11 +75,20 @@ func (cc *clickCounter) Incr(campaignID int64, vid string) {
 	if !ok {
 		cc.entries[key] = &clickEntry{
 			count:      1,
+			ip:         ip,
+			userAgent:  ua,
 			lastSeenAt: now,
 		}
 		return
 	}
 	entry.count++
+	// Always update to the most recently seen values.
+	if ip != "" {
+		entry.ip = ip
+	}
+	if ua != "" {
+		entry.userAgent = ua
+	}
 	entry.lastSeenAt = now
 }
 
@@ -107,12 +123,14 @@ func (cc *clickCounter) FlushToDB() error {
 		// Use raw SQL for upsert to support both SQLite and MySQL with
 		// database-specific conflict resolution.
 		_, err := sqlDB.Exec(
-			`INSERT INTO page_click_stats (campaign_id, vid, click_count, first_seen_at, last_seen_at)
-			 VALUES (?, ?, ?, ?, ?)
+			`INSERT INTO page_click_stats (campaign_id, vid, click_count, ip, user_agent, first_seen_at, last_seen_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT(campaign_id, vid) DO UPDATE SET
 			   click_count = click_count + excluded.click_count,
+			   ip = excluded.ip,
+			   user_agent = excluded.user_agent,
 			   last_seen_at = excluded.last_seen_at`,
-			key.campaignID, key.vid, entry.count, now, entry.lastSeenAt,
+			key.campaignID, key.vid, entry.count, entry.ip, entry.userAgent, now, entry.lastSeenAt,
 		)
 		if err != nil {
 			log.Errorf("click_counter: flush failed for campaign=%d vid=%s: %v",
@@ -140,12 +158,14 @@ func (cc *clickCounter) FlushToDBMySQL() error {
 
 	for key, entry := range snap {
 		_, err := sqlDB.Exec(
-			`INSERT INTO page_click_stats (campaign_id, vid, click_count, first_seen_at, last_seen_at)
-			 VALUES (?, ?, ?, ?, ?)
+			`INSERT INTO page_click_stats (campaign_id, vid, click_count, ip, user_agent, first_seen_at, last_seen_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)
 			 ON DUPLICATE KEY UPDATE
 			   click_count = click_count + VALUES(click_count),
+			   ip = VALUES(ip),
+			   user_agent = VALUES(user_agent),
 			   last_seen_at = VALUES(last_seen_at)`,
-			key.campaignID, key.vid, entry.count, now, entry.lastSeenAt,
+			key.campaignID, key.vid, entry.count, entry.ip, entry.userAgent, now, entry.lastSeenAt,
 		)
 		if err != nil {
 			log.Errorf("click_counter: flush failed for campaign=%d vid=%s: %v",

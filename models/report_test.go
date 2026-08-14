@@ -324,20 +324,22 @@ func (s *ModelsSuite) TestReportConfigJSONSerialization(c *check.C) {
 func (s *ModelsSuite) TestClickCounterIncr(c *check.C) {
 	// Reset counter state.
 	counter := &clickCounter{entries: make(map[clickKey]*clickEntry)}
-	counter.Incr(1, "vid-1")
-	counter.Incr(1, "vid-1")
-	counter.Incr(1, "vid-1") // same vid, different IP
+	counter.Incr(1, "vid-1", "10.0.0.1", "ua-1")
+	counter.Incr(1, "vid-1", "10.0.0.1", "ua-1")
+	counter.Incr(1, "vid-1", "10.0.0.2", "ua-2") // same vid, different IP/UA
 
 	counter.mu.Lock()
 	entry := counter.entries[clickKey{campaignID: 1, vid: "vid-1"}]
 	c.Assert(entry, check.NotNil)
 	c.Assert(entry.count, check.Equals, int64(3))
+	c.Assert(entry.ip, check.Equals, "10.0.0.2") // most recent IP
+	c.Assert(entry.userAgent, check.Equals, "ua-2") // most recent UA
 	counter.mu.Unlock()
 }
 
 func (s *ModelsSuite) TestClickCounterIncrEmptyVid(c *check.C) {
 	counter := &clickCounter{entries: make(map[clickKey]*clickEntry)}
-	counter.Incr(1, "") // empty vid should be ignored
+	counter.Incr(1, "", "10.0.0.1", "ua") // empty vid should be ignored
 
 	counter.mu.Lock()
 	c.Assert(len(counter.entries), check.Equals, 0)
@@ -346,8 +348,8 @@ func (s *ModelsSuite) TestClickCounterIncrEmptyVid(c *check.C) {
 
 func (s *ModelsSuite) TestClickCounterSnapshot(c *check.C) {
 	counter := &clickCounter{entries: make(map[clickKey]*clickEntry)}
-	counter.Incr(1, "vid-1")
-	counter.Incr(1, "vid-2")
+	counter.Incr(1, "vid-1", "10.0.0.1", "ua-1")
+	counter.Incr(1, "vid-2", "10.0.0.2", "ua-2")
 
 	snap := counter.snapshot()
 	c.Assert(len(snap), check.Equals, 2)
@@ -367,9 +369,9 @@ func (s *ModelsSuite) TestFlushToDB(c *check.C) {
 
 	// Use a fresh counter to avoid interference from the global singleton.
 	counter := &clickCounter{entries: make(map[clickKey]*clickEntry)}
-	counter.Incr(camp.Id, "vid-flush-1")
-	counter.Incr(camp.Id, "vid-flush-1")
-	counter.Incr(camp.Id, "vid-flush-2")
+	counter.Incr(camp.Id, "vid-flush-1", "10.0.0.1", "ua-1")
+	counter.Incr(camp.Id, "vid-flush-1", "10.0.0.1", "ua-1")
+	counter.Incr(camp.Id, "vid-flush-2", "10.0.0.2", "ua-2")
 
 	err := counter.FlushToDB()
 	c.Assert(err, check.IsNil)
@@ -378,10 +380,14 @@ func (s *ModelsSuite) TestFlushToDB(c *check.C) {
 	stats1, err := GetPageClickStats(camp.Id, "vid-flush-1")
 	c.Assert(err, check.IsNil)
 	c.Assert(stats1.ClickCount, check.Equals, int64(2))
+	c.Assert(stats1.IP, check.Equals, "10.0.0.1")
+	c.Assert(stats1.UserAgent, check.Equals, "ua-1")
 
 	stats2, err := GetPageClickStats(camp.Id, "vid-flush-2")
 	c.Assert(err, check.IsNil)
 	c.Assert(stats2.ClickCount, check.Equals, int64(1))
+	c.Assert(stats2.IP, check.Equals, "10.0.0.2")
+	c.Assert(stats2.UserAgent, check.Equals, "ua-2")
 }
 
 func (s *ModelsSuite) TestFlushToDBAccumulate(c *check.C) {
@@ -389,15 +395,15 @@ func (s *ModelsSuite) TestFlushToDBAccumulate(c *check.C) {
 
 	// First flush.
 	counter := &clickCounter{entries: make(map[clickKey]*clickEntry)}
-	counter.Incr(camp.Id, "vid-accum")
-	counter.Incr(camp.Id, "vid-accum")
+	counter.Incr(camp.Id, "vid-accum", "10.0.0.1", "ua-accum")
+	counter.Incr(camp.Id, "vid-accum", "10.0.0.1", "ua-accum")
 	err := counter.FlushToDB()
 	c.Assert(err, check.IsNil)
 
 	// Second flush with same vid.
-	counter.Incr(camp.Id, "vid-accum")
-	counter.Incr(camp.Id, "vid-accum")
-	counter.Incr(camp.Id, "vid-accum")
+	counter.Incr(camp.Id, "vid-accum", "10.0.0.1", "ua-accum")
+	counter.Incr(camp.Id, "vid-accum", "10.0.0.1", "ua-accum")
+	counter.Incr(camp.Id, "vid-accum", "10.0.0.1", "ua-accum")
 	err = counter.FlushToDB()
 	c.Assert(err, check.IsNil)
 
@@ -405,6 +411,8 @@ func (s *ModelsSuite) TestFlushToDBAccumulate(c *check.C) {
 	stats, err := GetPageClickStats(camp.Id, "vid-accum")
 	c.Assert(err, check.IsNil)
 	c.Assert(stats.ClickCount, check.Equals, int64(5))
+	c.Assert(stats.IP, check.Equals, "10.0.0.1")
+	c.Assert(stats.UserAgent, check.Equals, "ua-accum")
 }
 
 // ---------------------------------------------------------------------------
@@ -446,8 +454,8 @@ func (s *ModelsSuite) TestReportSummaryClickOnly(c *check.C) {
 
 	// Only click stats, no submission.
 	sqlDB, _ := db.DB()
-	sqlDB.Exec(`INSERT INTO page_click_stats (campaign_id, vid, click_count, first_seen_at, last_seen_at)
-		VALUES (?, ?, ?, datetime('now'), datetime('now'))`, camp.Id, "vid-bob", 3)
+	sqlDB.Exec(`INSERT INTO page_click_stats (campaign_id, vid, click_count, ip, user_agent, first_seen_at, last_seen_at)
+		VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`, camp.Id, "vid-bob", 3, "10.0.0.5", "bob-ua")
 
 	rows, total, err := GetCampaignReportSummary(camp.Id, PageParams{})
 	c.Assert(err, check.IsNil)
@@ -455,6 +463,8 @@ func (s *ModelsSuite) TestReportSummaryClickOnly(c *check.C) {
 	c.Assert(rows[0].Submitted, check.Equals, false)
 	c.Assert(rows[0].SubmissionCount, check.Equals, int64(0))
 	c.Assert(rows[0].ClickCount, check.Equals, int64(3))
+	c.Assert(rows[0].IP, check.Equals, "10.0.0.5")
+	c.Assert(rows[0].UserAgent, check.Equals, "bob-ua")
 }
 
 func (s *ModelsSuite) TestReportSummaryMixed(c *check.C) {
@@ -472,8 +482,8 @@ func (s *ModelsSuite) TestReportSummaryMixed(c *check.C) {
 		VALUES (?, ?, ?, datetime('now'), datetime('now'))`, camp.Id, "vid-a", 3)
 
 	// Visitor B: click-only.
-	sqlDB.Exec(`INSERT INTO page_click_stats (campaign_id, vid, click_count, first_seen_at, last_seen_at)
-		VALUES (?, ?, ?, datetime('now'), datetime('now'))`, camp.Id, "vid-b", 7)
+	sqlDB.Exec(`INSERT INTO page_click_stats (campaign_id, vid, click_count, ip, user_agent, first_seen_at, last_seen_at)
+		VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`, camp.Id, "vid-b", 7, "10.0.0.2", "b-ua")
 
 	rows, total, err := GetCampaignReportSummary(camp.Id, PageParams{})
 	c.Assert(err, check.IsNil)
@@ -487,6 +497,8 @@ func (s *ModelsSuite) TestReportSummaryMixed(c *check.C) {
 	c.Assert(rows[1].Submitted, check.Equals, false)
 	c.Assert(rows[1].Vid, check.Equals, "vid-b")
 	c.Assert(rows[1].ClickCount, check.Equals, int64(7))
+	c.Assert(rows[1].IP, check.Equals, "10.0.0.2")
+	c.Assert(rows[1].UserAgent, check.Equals, "b-ua")
 }
 
 func (s *ModelsSuite) TestReportSummaryPagination(c *check.C) {

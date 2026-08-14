@@ -441,6 +441,8 @@ func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryR
 		rows = append(rows, ReportSummaryRow{
 			Source:          SourceTypePage,
 			Vid:             vid,
+			IP:              cs.IP,
+			UserAgent:       cs.UserAgent,
 			Submitted:       false,
 			SubmissionCount: 0,
 			ClickCount:      cs.ClickCount,
