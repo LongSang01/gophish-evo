@@ -332,7 +332,7 @@ func (s *ModelsSuite) TestClickCounterIncr(c *check.C) {
 	entry := counter.entries[clickKey{campaignID: 1, vid: "vid-1"}]
 	c.Assert(entry, check.NotNil)
 	c.Assert(entry.count, check.Equals, int64(3))
-	c.Assert(entry.ip, check.Equals, "10.0.0.2") // most recent IP
+	c.Assert(entry.ip, check.Equals, "10.0.0.2")    // most recent IP
 	c.Assert(entry.userAgent, check.Equals, "ua-2") // most recent UA
 	counter.mu.Unlock()
 }

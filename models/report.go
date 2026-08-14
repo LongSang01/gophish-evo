@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -126,13 +127,17 @@ func (rc *ReportConfig) Lookup(key string) *ReportField {
 // ReportExt is a record of reported data from the client or fixed-page
 // modules, stored in the reports_ext table.
 type ReportExt struct {
-	Id         int64     `json:"id"`
-	CampaignId int64     `json:"campaign_id"`
-	Vid        string    `json:"vid"` // Visitor ID for page-type campaigns
-	DataJSON   string    `json:"-"`
-	Data       Map       `json:"data" gorm:"-"`
-	IP         string    `json:"ip"`
-	UserAgent  string    `json:"user_agent"`
+	Id         int64  `json:"id"`
+	CampaignId int64  `json:"campaign_id"`
+	Vid        string `json:"vid"` // Visitor ID for page-type campaigns
+	DataJSON   string `json:"-"`
+	Data       Map    `json:"data" gorm:"-"`
+	IP         string `json:"ip"`
+	UserAgent  string `json:"user_agent"`
+	// DedupValue holds the configured dedup key value (e.g. the MAC) for
+	// client-type campaigns. NULL means "never deduplicate" so page
+	// submissions and submissions lacking the dedup key are always stored.
+	DedupValue *string   `json:"-" gorm:"column:dedup_value"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 
@@ -203,27 +208,48 @@ func SaveReportExt(campaignID int64, data Map, rc *ReportConfig, ip, ua, vid str
 	re.CreatedAt = time.Now().UTC()
 
 	// For client-type campaigns with a dedup key configured, check for
-	// existing records with the same dedup value before inserting.
+	// existing records with the same dedup value before inserting. The
+	// dedup_value column is UNIQUE per campaign so this lookup is indexed
+	// (no JSON scan). NULL is stored for submissions that should never be
+	// deduplicated, which the unique index permits for any row count.
 	if rc != nil && rc.DedupKey != "" {
 		if v, ok := data[rc.DedupKey]; ok && v != nil {
 			dedupVal := fmt.Sprintf("%v", v)
 			var count int64
 			if err := db.Table("reports_ext").Where(
-				"campaign_id=? AND data_json LIKE ?",
-				campaignID, "%\""+rc.DedupKey+"\":"+fmt.Sprintf("%q", dedupVal)+"%").
+				"campaign_id=? AND dedup_value=?", campaignID, dedupVal).
 				Count(&count).Error; err != nil {
 				return nil, err
 			}
 			if count > 0 {
 				return nil, nil // duplicate, skip
 			}
+			re.DedupValue = &dedupVal
 		}
 	}
 
 	if err := db.Create(re).Error; err != nil {
+		// The unique index on (campaign_id, dedup_value) protects against
+		// duplicate inserts racing the application-level check above; treat
+		// such a conflict as an idempotent skip.
+		if re.DedupValue != nil && isDuplicateKeyError(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return re, nil
+}
+
+// isDuplicateKeyError reports whether the error is a unique constraint
+// violation.
+func isDuplicateKeyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique constraint") ||
+		strings.Contains(msg, "unique") ||
+		strings.Contains(msg, "duplicate")
 }
 
 // SaveReportExtBatch inserts a batch of report records. For client-type
@@ -279,9 +305,16 @@ func GetCampaignReports(campaignID int64, pp PageParams) ([]ReportExt, int64, er
 	return reports, total, nil
 }
 
-// DeleteCampaignReports removes all report records belonging to a campaign.
+// DeleteCampaignReports removes all report records belonging to a campaign,
+// along with its aggregated page click statistics (which would otherwise be
+// left orphaned after campaign deletion).
 func DeleteCampaignReports(campaignID int64) error {
 	err := db.Where("campaign_id=?", campaignID).Delete(&ReportExt{}).Error
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	err = db.Where("campaign_id=?", campaignID).Delete(&PageClickStats{}).Error
 	if err != nil {
 		log.Error(err)
 	}
@@ -325,78 +358,77 @@ type ReportSummaryRow struct {
 //
 // Results are ordered: submitted visitors first (sorted by submission time),
 // then click-only visitors (sorted by last click time).
+//
+// Submissions are aggregated in SQL so only the representative (latest)
+// record per vid is loaded, avoiding pulling every submission's JSON into
+// memory for paginated reads.
 func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryRow, int64, error) {
-	rows := []ReportSummaryRow{}
-	var total int64
+	rdb := readDB()
 
-	// 1. Load all reports_ext for this campaign.
-	var reports []ReportExt
-	if err := readDB().Where("campaign_id=?", campaignID).
-		Order("id ASC").Find(&reports).Error; err != nil {
+	// 1. Aggregate submissions per vid (non-empty vid). Only the latest
+	//    record id per vid is needed to reconstruct the representative row.
+	type submissionAgg struct {
+		Vid             string
+		SubmissionCount int64
+		LastID          int64
+	}
+	var aggs []submissionAgg
+	if err := rdb.Table("reports_ext").
+		Select("vid, COUNT(*) AS submission_count, MAX(id) AS last_id").
+		Where("campaign_id=? AND vid<>''", campaignID).
+		Group("vid").
+		Scan(&aggs).Error; err != nil {
 		return nil, 0, err
 	}
 
-	// 2. Load all page_click_stats for this campaign.
+	// 2. Load click stats.
 	var clickStats []PageClickStats
-	if err := readDB().Where("campaign_id=?", campaignID).Find(&clickStats).Error; err != nil {
+	if err := rdb.Where("campaign_id=?", campaignID).Find(&clickStats).Error; err != nil {
 		return nil, 0, err
 	}
-
-	// Build a map from vid → click stats.
 	clickMap := make(map[string]*PageClickStats, len(clickStats))
 	for i := range clickStats {
 		clickMap[clickStats[i].Vid] = &clickStats[i]
 	}
 
-	// 3. Group reports by vid (non-empty vid). Reports with empty vid
-	//    (legacy data) are each their own group.
-	type reportGroup struct {
-		reports []ReportExt
-		vid     string
-	}
-	groupByVid := map[string]*reportGroup{}
-	var legacyGroups []*reportGroup
+	rows := make([]ReportSummaryRow, 0, len(aggs)+16)
 
-	for _, r := range reports {
-		if r.Vid == "" {
-			// Legacy: each record is its own row.
-			legacyGroups = append(legacyGroups, &reportGroup{reports: []ReportExt{r}, vid: ""})
-			continue
+	// 3. Load the representative (latest) report of each vid group.
+	lastIDs := make([]int64, 0, len(aggs))
+	for _, a := range aggs {
+		lastIDs = append(lastIDs, a.LastID)
+	}
+	repByID := make(map[int64]ReportExt, len(lastIDs))
+	if len(lastIDs) > 0 {
+		var reps []ReportExt
+		if err := rdb.Where("id IN ?", lastIDs).Find(&reps).Error; err != nil {
+			return nil, 0, err
 		}
-		g, ok := groupByVid[r.Vid]
-		if !ok {
-			g = &reportGroup{vid: r.Vid}
-			groupByVid[r.Vid] = g
+		for i := range reps {
+			repByID[reps[i].Id] = reps[i]
 		}
-		g.reports = append(g.reports, r)
 	}
 
-	// 4. Build summary rows for submitted visitors (non-empty vid).
-	//    Use the LAST report as the representative row (most recent data).
-	submittedVids := make(map[string]bool)
-	for vid, g := range groupByVid {
-		last := g.reports[len(g.reports)-1]
+	submittedVids := make(map[string]bool, len(aggs))
+	for _, a := range aggs {
+		last := repByID[a.LastID]
 		var m Map
 		if err := json.Unmarshal([]byte(last.DataJSON), &m); err != nil {
 			m = Map{}
 		}
-		totalClicks := int64(len(g.reports)) // at least as many clicks as submissions
-		if cs, ok := clickMap[vid]; ok {
-			totalClicks = cs.ClickCount
-		}
-
+		totalClicks := a.SubmissionCount // at least as many clicks as submissions
 		var lastClickAt time.Time
-		if cs, ok := clickMap[vid]; ok {
+		if cs, ok := clickMap[a.Vid]; ok {
+			totalClicks = cs.ClickCount
 			lastClickAt = cs.LastSeenAt
 		}
-
 		rows = append(rows, ReportSummaryRow{
 			Source:          SourceTypePage,
-			Vid:             vid,
+			Vid:             a.Vid,
 			IP:              last.IP,
 			UserAgent:       last.UserAgent,
 			Submitted:       true,
-			SubmissionCount: int64(len(g.reports)),
+			SubmissionCount: a.SubmissionCount,
 			ClickCount:      totalClicks,
 			LastClickAt:     lastClickAt,
 			ReportExtId:     last.Id,
@@ -406,12 +438,16 @@ func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryR
 			FirstSeenAt:     last.CreatedAt,
 			LastSeenAt:      last.CreatedAt,
 		})
-		submittedVids[vid] = true
+		submittedVids[a.Vid] = true
 	}
 
-	// 5. Build summary rows for legacy submissions (empty vid).
-	for _, g := range legacyGroups {
-		r := g.reports[0]
+	// 4. Legacy submissions (empty vid): each record is its own row.
+	var legacy []ReportExt
+	if err := rdb.Where("campaign_id=? AND vid=''", campaignID).
+		Order("id DESC").Find(&legacy).Error; err != nil {
+		return nil, 0, err
+	}
+	for _, r := range legacy {
 		var m Map
 		if err := json.Unmarshal([]byte(r.DataJSON), &m); err != nil {
 			m = Map{}
@@ -433,7 +469,7 @@ func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryR
 		})
 	}
 
-	// 6. Build summary rows for click-only visitors (in clickMap but no reports).
+	// 5. Click-only visitors (in clickMap but no reports).
 	for vid, cs := range clickMap {
 		if submittedVids[vid] {
 			continue
@@ -454,13 +490,13 @@ func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryR
 		})
 	}
 
-	// 7. Sort: submitted first (by last submission time DESC), then
+	// 6. Sort: submitted first (by last submission time DESC), then
 	//    click-only (by last click time DESC).
 	sortSummaryRows(rows)
 
-	total = int64(len(rows))
+	total := int64(len(rows))
 
-	// 8. Apply pagination manually.
+	// 7. Apply pagination manually.
 	if pp.Valid() {
 		start := pp.Offset()
 		end := start + pp.PageSize
@@ -479,36 +515,19 @@ func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryR
 // sortSummaryRows sorts the summary rows: submitted first (newest first),
 // then click-only (newest first).
 func sortSummaryRows(rows []ReportSummaryRow) {
-	// Simple insertion sort — the dataset is typically small.
-	for i := 1; i < len(rows); i++ {
-		j := i
-		for j > 0 {
-			swap := false
-			a, b := rows[j-1], rows[j]
-			// Submitted rows come before non-submitted.
-			if a.Submitted != b.Submitted {
-				if !a.Submitted && b.Submitted {
-					swap = true
-				}
-			} else {
-				// Within the same group, sort by most recent time.
-				timeA := a.LastSeenAt
-				timeB := b.LastSeenAt
-				if a.Submitted {
-					timeA = a.FirstSeenAt
-					timeB = b.FirstSeenAt
-				}
-				if timeA.Before(timeB) {
-					swap = true
-				}
-			}
-			if !swap {
-				break
-			}
-			rows[j-1], rows[j] = rows[j], rows[j-1]
-			j--
+	sort.SliceStable(rows, func(i, j int) bool {
+		a, b := rows[i], rows[j]
+		// Submitted rows come before non-submitted.
+		if a.Submitted != b.Submitted {
+			return a.Submitted
 		}
-	}
+		// Within the same group, sort by the most recent activity time.
+		timeA, timeB := a.LastSeenAt, b.LastSeenAt
+		if a.Submitted {
+			timeA, timeB = a.FirstSeenAt, b.FirstSeenAt
+		}
+		return timeA.After(timeB)
+	})
 }
 
 // GetPageCampaignByPath returns the fixed-page type campaign whose configured

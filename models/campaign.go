@@ -284,7 +284,7 @@ func (c *Campaign) getDetails() error {
 	}
 
 	// Load campaign stats
-	c.Stats, err = getCampaignStats(c.Id)
+	c.Stats, err = getCampaignStats(c.Id, c.SourceType)
 	if err != nil {
 		log.Warnf("%s: stats not found for campaign", err)
 	}
@@ -335,67 +335,81 @@ func (c *Campaign) generateSendDate(idx int, totalRecipients int) time.Time {
 	return c.LaunchDate.Add(time.Duration(offset) * time.Minute)
 }
 
-// getCampaignStats returns a CampaignStats object for the campaign with the given campaign ID.
-// It also backfills numbers as appropriate with a running total, so that the values are aggregated.
-func getCampaignStats(cid int64) (CampaignStats, error) {
+// getCampaignStats returns a CampaignStats object for the campaign with the
+// given campaign ID. It also backfills numbers as appropriate with a running
+// total, so that the values are aggregated.
+//
+// The results-based counters are computed in a single conditional-aggregate
+// query; report/click stats are only queried for client/page campaigns.
+func getCampaignStats(cid int64, sourceType string) (CampaignStats, error) {
 	s := CampaignStats{}
-	query := readDB().Table("results").Where("campaign_id = ?", cid)
-	err := query.Count(&s.Total).Error
+	type aggRow struct {
+		Total    int64
+		Sent     int64
+		Opened   int64
+		Clicked  int64
+		Sub      int64
+		Err      int64
+		Reported int64
+	}
+	var row aggRow
+	err := readDB().Table("results").
+		Select(`
+			COUNT(*)                                                      AS total,
+			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS sent,
+			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS opened,
+			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS clicked,
+			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS sub,
+			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS err,
+			SUM(CASE WHEN reported = 1 THEN 1 ELSE 0 END)                AS reported
+		`, EventSent, EventOpened, EventClicked, EventDataSubmit, Error).
+		Where("campaign_id = ?", cid).
+		Scan(&row).Error
 	if err != nil {
 		return s, err
 	}
-	if err = readDB().Table("results").Where("campaign_id = ?", cid).Where("status=?", EventDataSubmit).Count(&s.SubmittedData).Error; err != nil {
-		return s, err
-	}
-	if err = readDB().Table("results").Where("campaign_id = ?", cid).Where("status=?", EventClicked).Count(&s.ClickedLink).Error; err != nil {
-		return s, err
-	}
-	if err = readDB().Table("results").Where("campaign_id = ?", cid).Where("reported=?", true).Count(&s.EmailReported).Error; err != nil {
-		return s, err
-	}
-	// Every submitted data event implies they clicked the link
-	s.ClickedLink += s.SubmittedData
-	if err = readDB().Table("results").Where("campaign_id = ?", cid).Where("status=?", EventOpened).Count(&s.OpenedEmail).Error; err != nil {
-		return s, err
-	}
-	// Every clicked link event implies they opened the email
-	s.OpenedEmail += s.ClickedLink
-	if err = readDB().Table("results").Where("campaign_id = ?", cid).Where("status=?", EventSent).Count(&s.EmailsSent).Error; err != nil {
-		return s, err
-	}
-	// Every opened email event implies the email was sent
-	s.EmailsSent += s.OpenedEmail
-	if err = readDB().Table("results").Where("campaign_id = ?", cid).Where("status=?", Error).Count(&s.Error).Error; err != nil {
-		return s, err
-	}
+	// Apply running total backfill.
+	s.Total = row.Total
+	s.SubmittedData = row.Sub
+	s.ClickedLink = row.Clicked + row.Sub
+	s.OpenedEmail = row.Opened + row.Clicked + row.Sub
+	s.EmailsSent = row.Sent + row.Opened + row.Clicked + row.Sub
+	s.EmailReported = row.Reported
+	s.Error = row.Err
 
-	// For client/page campaigns, query reports_ext for the actual report count.
-	// Email campaigns never write to reports_ext, so this stays zero for them.
-	if err = readDB().Table("reports_ext").Where("campaign_id = ?", cid).Count(&s.ReportCount).Error; err != nil {
-		return s, err
-	}
-	// Also populate SubmittedData for client/page campaigns (the email-specific
-	// SubmittedData count from results is always zero for these types).
-	if s.ReportCount > 0 && s.SubmittedData == 0 {
-		s.SubmittedData = s.ReportCount
-		// page_click_stats unique index (campaign_id, vid) = total unique visitors.
-		var totalVisitors int64
-		if err = readDB().Table("page_click_stats").Where("campaign_id = ?", cid).Count(&totalVisitors).Error; err != nil {
+	// Report and page-click stats only exist for client/page campaigns.
+	// Email campaigns never write to reports_ext, so skip these queries.
+	if sourceType == SourceTypeClient || sourceType == SourceTypePage {
+		if err = readDB().Table("reports_ext").Where("campaign_id = ?", cid).Count(&s.ReportCount).Error; err != nil {
 			return s, err
 		}
-		s.OpenedEmail = totalVisitors
+		// Also populate SubmittedData for client/page campaigns (the
+		// email-specific SubmittedData count from results is always zero for
+		// these types).
+		if s.ReportCount > 0 && s.SubmittedData == 0 {
+			s.SubmittedData = s.ReportCount
+			// page_click_stats unique index (campaign_id, vid) = total unique visitors.
+			var totalVisitors int64
+			if err = readDB().Table("page_click_stats").Where("campaign_id = ?", cid).Count(&totalVisitors).Error; err != nil {
+				return s, err
+			}
+			s.OpenedEmail = totalVisitors
+		}
 	}
 
 	// For page-type campaigns, add page click stats to ClickedLink.
 	// The page_click_stats table records the total number of page opens
 	// per visitor, flushed from memory periodically.
-	var pageClicks int64
-	if err = readDB().Table("page_click_stats").Where("campaign_id = ?", cid).Select("COALESCE(SUM(click_count), 0)").Scan(&pageClicks).Error; err != nil {
-		return s, err
+	if sourceType == SourceTypePage {
+		var pageClicks int64
+		if err = readDB().Table("page_click_stats").Where("campaign_id = ?", cid).
+			Select("COALESCE(SUM(click_count), 0)").Scan(&pageClicks).Error; err != nil {
+			return s, err
+		}
+		s.ClickedLink += pageClicks
 	}
-	s.ClickedLink += pageClicks
 
-	return s, err
+	return s, nil
 }
 
 // GetCampaigns returns a paginated page of campaigns owned by the given user.
@@ -444,7 +458,7 @@ func GetCampaignSummaries(uid int64, pp PageParams) (CampaignSummaries, error) {
 		return overview, err
 	}
 	for i := range cs {
-		s, err := getCampaignStats(cs[i].Id)
+		s, err := getCampaignStats(cs[i].Id, cs[i].SourceType)
 		if err != nil {
 			log.Error(err)
 			return overview, err
@@ -585,6 +599,51 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 		return resp, err
 	}
 
+	// Batch per-campaign report / click stats so the timeline does not issue
+	// N+1 queries on the loop below.
+	type keyedCountRow struct {
+		CampaignId int64
+		Cnt        int64
+	}
+	reportCounts := map[int64]int64{}
+	visitorCounts := map[int64]int64{}
+	campaignClicks := map[int64]int64{}
+	if len(rows) > 0 {
+		ids := make([]int64, 0, len(rows))
+		for _, r_ := range rows {
+			ids = append(ids, r_.Id)
+		}
+		var repRows []keyedCountRow
+		if err := readDB().Table("reports_ext").Select("campaign_id, COUNT(*) AS cnt").
+			Where("campaign_id IN ?", ids).Group("campaign_id").Scan(&repRows).Error; err != nil {
+			return resp, err
+		}
+		for _, r_ := range repRows {
+			reportCounts[r_.CampaignId] = r_.Cnt
+		}
+		var visRows []keyedCountRow
+		if err := readDB().Table("page_click_stats").Select("campaign_id, COUNT(*) AS cnt").
+			Where("campaign_id IN ?", ids).Group("campaign_id").Scan(&visRows).Error; err != nil {
+			return resp, err
+		}
+		for _, r_ := range visRows {
+			visitorCounts[r_.CampaignId] = r_.Cnt
+		}
+		type keyedSumRow struct {
+			CampaignId int64
+			Sum        int64
+		}
+		var sumRows []keyedSumRow
+		if err := readDB().Table("page_click_stats").
+			Select("campaign_id, COALESCE(SUM(click_count), 0) AS sum").
+			Where("campaign_id IN ?", ids).Group("campaign_id").Scan(&sumRows).Error; err != nil {
+			return resp, err
+		}
+		for _, r_ := range sumRows {
+			campaignClicks[r_.CampaignId] = r_.Sum
+		}
+	}
+
 	// Convert timelineRows to DashboardTimelineEntry with running total backfill
 	timeline := make([]DashboardTimelineEntry, 0, len(rows))
 	for _, r_ := range rows {
@@ -601,26 +660,14 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 			EmailReported: r_.Reported,
 			Error:         r_.Error,
 		}
-		// Query per-campaign report count (lightweight COUNT)
-		if err = readDB().Table("reports_ext").Where("campaign_id = ?", r_.Id).Count(&entry.ReportCount).Error; err != nil {
-			return resp, err
-		}
+		entry.ReportCount = reportCounts[r_.Id]
 		if entry.ReportCount > 0 && entry.SubmittedData == 0 {
 			entry.SubmittedData = entry.ReportCount
 			// page_click_stats unique index (campaign_id, vid) = total unique visitors.
-			var totalVisitors int64
-			if err = readDB().Table("page_click_stats").Where("campaign_id = ?", r_.Id).Count(&totalVisitors).Error; err != nil {
-				return resp, err
-			}
-			entry.OpenedEmail = totalVisitors
+			entry.OpenedEmail = visitorCounts[r_.Id]
 		}
 		// Add page click stats for this campaign.
-		var campaignPageClicks int64
-		if err = readDB().Table("page_click_stats").Where("campaign_id = ?", r_.Id).
-			Select("COALESCE(SUM(click_count), 0)").Scan(&campaignPageClicks).Error; err != nil {
-			return resp, err
-		}
-		entry.ClickedLink += campaignPageClicks
+		entry.ClickedLink += campaignClicks[r_.Id]
 		timeline = append(timeline, entry)
 	}
 	resp.Timeline = timeline
@@ -638,7 +685,7 @@ func GetCampaignSummary(id int64, uid int64) (CampaignSummary, error) {
 		log.Error(err)
 		return cs, err
 	}
-	s, err := getCampaignStats(cs.Id)
+	s, err := getCampaignStats(cs.Id, cs.SourceType)
 	if err != nil {
 		log.Error(err)
 		return cs, err

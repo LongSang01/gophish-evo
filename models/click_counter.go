@@ -107,6 +107,28 @@ func (cc *clickCounter) snapshot() map[clickKey]*clickEntry {
 // semantics (click_count += value). Individual row failures are logged but
 // do not abort the entire flush.
 func (cc *clickCounter) FlushToDB() error {
+	// SQLite-style upsert.
+	return cc.flush(` ON CONFLICT(campaign_id, vid) DO UPDATE SET
+			   click_count = click_count + excluded.click_count,
+			   ip = excluded.ip,
+			   user_agent = excluded.user_agent,
+			   last_seen_at = excluded.last_seen_at`)
+}
+
+// FlushToDBMySQL writes accumulated click counts using MySQL-specific upsert
+// syntax. This is used when the database backend is MySQL.
+func (cc *clickCounter) FlushToDBMySQL() error {
+	return cc.flush(` ON DUPLICATE KEY UPDATE
+			   click_count = click_count + VALUES(click_count),
+			   ip = VALUES(ip),
+			   user_agent = VALUES(user_agent),
+			   last_seen_at = VALUES(last_seen_at)`)
+}
+
+// flush snapshots the counter and upserts every entry in a single
+// transaction, which is significantly faster on SQLite than one implicit
+// transaction per row.
+func (cc *clickCounter) flush(upsertClause string) error {
 	snap := cc.snapshot()
 	if len(snap) == 0 {
 		return nil
@@ -118,59 +140,25 @@ func (cc *clickCounter) FlushToDB() error {
 		log.Errorf("click_counter: failed to get sql.DB: %v", err)
 		return err
 	}
-
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		log.Errorf("click_counter: failed to begin transaction: %v", err)
+		return err
+	}
+	const insert = `INSERT INTO page_click_stats (campaign_id, vid, click_count, ip, user_agent, first_seen_at, last_seen_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`
 	for key, entry := range snap {
-		// Use raw SQL for upsert to support both SQLite and MySQL with
-		// database-specific conflict resolution.
-		_, err := sqlDB.Exec(
-			`INSERT INTO page_click_stats (campaign_id, vid, click_count, ip, user_agent, first_seen_at, last_seen_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?)
-			 ON CONFLICT(campaign_id, vid) DO UPDATE SET
-			   click_count = click_count + excluded.click_count,
-			   ip = excluded.ip,
-			   user_agent = excluded.user_agent,
-			   last_seen_at = excluded.last_seen_at`,
-			key.campaignID, key.vid, entry.count, entry.ip, entry.userAgent, now, entry.lastSeenAt,
-		)
+		_, err := tx.Exec(insert+upsertClause,
+			key.campaignID, key.vid, entry.count, entry.ip, entry.userAgent, now, entry.lastSeenAt)
 		if err != nil {
 			log.Errorf("click_counter: flush failed for campaign=%d vid=%s: %v",
 				key.campaignID, key.vid, err)
 			// Continue with remaining entries — don't lose the whole batch.
 		}
 	}
-	return nil
-}
-
-// FlushToDBMySQL writes accumulated click counts using MySQL-specific upsert
-// syntax. This is used when the database backend is MySQL.
-func (cc *clickCounter) FlushToDBMySQL() error {
-	snap := cc.snapshot()
-	if len(snap) == 0 {
-		return nil
-	}
-
-	now := time.Now().UTC()
-	sqlDB, err := db.DB()
-	if err != nil {
-		log.Errorf("click_counter: failed to get sql.DB: %v", err)
+	if err := tx.Commit(); err != nil {
+		log.Errorf("click_counter: flush commit failed: %v", err)
 		return err
-	}
-
-	for key, entry := range snap {
-		_, err := sqlDB.Exec(
-			`INSERT INTO page_click_stats (campaign_id, vid, click_count, ip, user_agent, first_seen_at, last_seen_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?)
-			 ON DUPLICATE KEY UPDATE
-			   click_count = click_count + VALUES(click_count),
-			   ip = VALUES(ip),
-			   user_agent = VALUES(user_agent),
-			   last_seen_at = VALUES(last_seen_at)`,
-			key.campaignID, key.vid, entry.count, entry.ip, entry.userAgent, now, entry.lastSeenAt,
-		)
-		if err != nil {
-			log.Errorf("click_counter: flush failed for campaign=%d vid=%s: %v",
-				key.campaignID, key.vid, err)
-		}
 	}
 	return nil
 }
@@ -229,17 +217,4 @@ func GetPageClickStats(campaignID int64, vid string) (*PageClickStats, error) {
 		return nil, err
 	}
 	return &pcs, nil
-}
-
-// GetPageClickStatsByVid returns all click stats for a campaign keyed by vid.
-func GetPageClickStatsByVid(campaignID int64) (map[string]*PageClickStats, error) {
-	var all []PageClickStats
-	if err := db.Where("campaign_id = ?", campaignID).Find(&all).Error; err != nil {
-		return nil, err
-	}
-	m := make(map[string]*PageClickStats, len(all))
-	for i := range all {
-		m[all[i].Vid] = &all[i]
-	}
-	return m, nil
 }

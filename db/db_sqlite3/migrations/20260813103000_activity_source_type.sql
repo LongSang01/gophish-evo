@@ -21,12 +21,21 @@ CREATE TABLE IF NOT EXISTS "reports_ext" (
     "data_json"   text NOT NULL DEFAULT '{}',
     "ip"          text,
     "user_agent"  text,
+    "dedup_value" text,
     "created_at"  datetime
 );
 
 CREATE INDEX IF NOT EXISTS "idx_reports_ext_campaign_vid" ON "reports_ext" ("campaign_id", "vid");
+-- Exact-match dedup for client campaigns. NULL rows (page submissions /
+-- submissions without the dedup key) are never deduplicated by this index.
+CREATE UNIQUE INDEX IF NOT EXISTS "uniq_reports_ext_campaign_dedup"
+    ON "reports_ext" ("campaign_id", "dedup_value");
+
+-- Hot path: campaign-scoped result/stat queries filter on campaign_id.
+CREATE INDEX IF NOT EXISTS "idx_results_campaign_id" ON "results" ("campaign_id");
 
 -- +goose Down
 DROP TABLE IF EXISTS reports_ext;
+DROP INDEX IF EXISTS idx_results_campaign_id;
 -- Note: SQLite does not support DROP COLUMN directly, so rolling back the
 -- campaigns columns requires recreating the table, which is out of scope.
