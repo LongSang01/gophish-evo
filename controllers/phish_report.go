@@ -192,9 +192,6 @@ func (ps *PhishingServer) renderFixedPage(w http.ResponseWriter, r *http.Request
 			}
 		}
 
-		// Also record a click for the POST itself (form submission).
-		models.ClickCounter.Incr(c.Id, vid, ip)
-
 		if p.RedirectURL != "" {
 			http.Redirect(w, r, p.RedirectURL, http.StatusFound)
 			return
