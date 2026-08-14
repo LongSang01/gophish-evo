@@ -443,19 +443,29 @@
         <a-descriptions-item label="上报时间">{{
           formatDate(reportDetail.created_at)
         }}</a-descriptions-item>
+        <template v-if="reportDetail.submitted !== undefined">
+          <a-descriptions-item label="提交次数">{{
+            reportDetail.submission_count ?? 0
+          }}</a-descriptions-item>
+          <a-descriptions-item label="点击次数">{{
+            reportDetail.click_count ?? 0
+          }}</a-descriptions-item>
+        </template>
       </a-descriptions>
       <a-timeline>
-        <a-timeline-item color="blue">
+        <a-timeline-item
+          v-for="(entry, tIndex) in reportTimeline"
+          :key="tIndex"
+          color="blue"
+        >
           <div class="event-card">
             <div class="event-header">
               <span class="event-type">采集数据</span>
-              <span class="event-time">{{
-                formatDate(reportDetail?.created_at)
-              }}</span>
+              <span class="event-time">{{ formatDate(entry.time) }}</span>
             </div>
-            <div v-if="reportDetailRows.length" class="timeline-details">
+            <div v-if="entry.rows.length" class="timeline-details">
               <div
-                v-for="(item, idx) in reportDetailRows"
+                v-for="(item, idx) in entry.rows"
                 :key="idx"
                 class="detail-item"
               >
@@ -472,6 +482,10 @@
             <a-empty v-else description="无采集字段" />
           </div>
         </a-timeline-item>
+        <a-empty
+          v-if="!reportTimeline.length"
+          description="暂无上报记录"
+        />
       </a-timeline>
     </a-drawer>
   </div>
@@ -536,6 +550,27 @@ const reportDetailRows = ref<{ key: string; value: string }[]>([]);
 const reportSourceLabel = computed(() =>
   reportDetail.value?.source === "client" ? "客户端" : "页面",
 );
+// Full submission timeline for the report drawer. When the row carries a
+// submissions list (page-type summary rows), each submission becomes its own
+// timeline entry ordered oldest first. Otherwise fall back to the single row.
+const reportTimeline = computed(() => {
+  const d = reportDetail.value;
+  if (!d) return [];
+  const subs =
+    Array.isArray(d.submissions) && d.submissions.length
+      ? d.submissions
+      : null;
+  if (subs) {
+    return subs.map((s: any) => {
+      const rows: { key: string; value: string }[] = [];
+      for (const [k, v] of Object.entries(s.data || {})) {
+        rows.push({ key: k, value: String(v ?? "") });
+      }
+      return { time: s.created_at, rows };
+    });
+  }
+  return [{ time: d.created_at, rows: reportDetailRows.value }];
+});
 const pagination = reactive({
   current: 1,
   pageSize: 10,
@@ -702,11 +737,6 @@ function showReportDetails(record: any) {
   const data = record.data || {};
   for (const [k, v] of Object.entries(data)) {
     rows.push({ key: k, value: String(v ?? "") });
-  }
-  // For summary rows, show click/submission stats as additional info.
-  if (record.submitted !== undefined) {
-    rows.push({ key: "提交次数", value: String(record.submission_count ?? 0) });
-    rows.push({ key: "额外点击次数", value: String(record.click_count ?? 0) });
   }
   reportDetailRows.value = rows;
   reportDrawerVisible.value = true;

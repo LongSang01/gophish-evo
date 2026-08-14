@@ -344,6 +344,11 @@ type ReportSummaryRow struct {
 	CreatedAt       time.Time `json:"created_at"` // for submitted: last submission time; for click-only: last click time
 	FirstSeenAt     time.Time `json:"first_seen_at,omitempty"`
 	LastSeenAt      time.Time `json:"last_seen_at,omitempty"`
+	// Submissions holds every report record for a submitted visitor, ordered
+	// oldest first, so the frontend can render a complete submission timeline.
+	// It is only populated for the rows on the current page. Legacy rows
+	// (empty vid) have no Submissions; their single record is in Data.
+	Submissions []ReportExt `json:"submissions,omitempty"`
 }
 
 // GetCampaignReportSummary returns the aggregated report view for a campaign.
@@ -360,8 +365,8 @@ type ReportSummaryRow struct {
 // then click-only visitors (sorted by last click time).
 //
 // Submissions are aggregated in SQL so only the representative (latest)
-// record per vid is loaded, avoiding pulling every submission's JSON into
-// memory for paginated reads.
+// record per vid is loaded during pagination; the full submission history of
+// the current page's rows is loaded afterwards for the timeline view.
 func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryRow, int64, error) {
 	rdb := readDB()
 
@@ -507,6 +512,39 @@ func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryR
 			end = len(rows)
 		}
 		rows = rows[start:end]
+	}
+
+	// 8. Load the full submission history for the submitted rows on this page
+	//    so the frontend can render a complete timeline. Only the current
+	//    page's non-empty vids are fetched, keeping the query bounded.
+	var pageVids []string
+	for i := range rows {
+		if rows[i].Submitted && rows[i].Vid != "" {
+			pageVids = append(pageVids, rows[i].Vid)
+		}
+	}
+	if len(pageVids) > 0 {
+		var subs []ReportExt
+		if err := rdb.Where("campaign_id=? AND vid IN ?", campaignID, pageVids).
+			Order("id ASC").Find(&subs).Error; err != nil {
+			return nil, 0, err
+		}
+		subMap := make(map[string][]ReportExt, len(pageVids))
+		for i := range subs {
+			var m Map
+			if err := json.Unmarshal([]byte(subs[i].DataJSON), &m); err != nil {
+				m = Map{}
+			}
+			subs[i].Data = m
+			subMap[subs[i].Vid] = append(subMap[subs[i].Vid], subs[i])
+		}
+		for i := range rows {
+			if rows[i].Submitted && rows[i].Vid != "" {
+				if ss, ok := subMap[rows[i].Vid]; ok {
+					rows[i].Submissions = ss
+				}
+			}
+		}
 	}
 
 	return rows, total, nil

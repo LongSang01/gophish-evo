@@ -527,6 +527,34 @@ func (s *ModelsSuite) TestReportSummaryPagination(c *check.C) {
 	c.Assert(len(rows), check.Equals, 1)
 }
 
+func (s *ModelsSuite) TestReportSummaryMultipleSubmissionsTimeline(c *check.C) {
+	camp := s.createCampaignDependencies(c)
+	camp.SourceType = SourceTypePage
+	camp.ReportConfig = &ReportConfig{Fields: []ReportField{}, DedupKey: ""}
+	err := PostCampaign(&camp, camp.UserId)
+	c.Assert(err, check.IsNil)
+	rc, _ := GetCampaignReportConfig(&camp)
+
+	// A visitor submits the fixed page form three times with different data.
+	for i := 0; i < 3; i++ {
+		_, err := SaveReportExt(camp.Id, Map{"name": fmt.Sprintf("Alice-%d", i)}, rc, "10.0.0.1", "ua", "vid-multi")
+		c.Assert(err, check.IsNil)
+	}
+
+	rows, total, err := GetCampaignReportSummary(camp.Id, PageParams{})
+	c.Assert(err, check.IsNil)
+	c.Assert(total, check.Equals, int64(1))
+	c.Assert(rows[0].Submitted, check.Equals, true)
+	c.Assert(rows[0].SubmissionCount, check.Equals, int64(3))
+	// The representative row carries the latest submission's data.
+	c.Assert(rows[0].Data["name"], check.Equals, "Alice-2")
+	// The full timeline must contain every submission, oldest first.
+	c.Assert(len(rows[0].Submissions), check.Equals, 3)
+	c.Assert(rows[0].Submissions[0].Data["name"], check.Equals, "Alice-0")
+	c.Assert(rows[0].Submissions[1].Data["name"], check.Equals, "Alice-1")
+	c.Assert(rows[0].Submissions[2].Data["name"], check.Equals, "Alice-2")
+}
+
 func (s *ModelsSuite) TestReportSummaryLegacyRecords(c *check.C) {
 	camp := s.createCampaignDependencies(c)
 	camp.SourceType = SourceTypePage
