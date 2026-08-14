@@ -1,12 +1,10 @@
 package api
 
 import (
-	"encoding/csv"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	ctx "github.com/gophish/gophish/context"
 	log "github.com/gophish/gophish/logger"
@@ -111,75 +109,37 @@ func (as *Server) CampaignReportsExport(w http.ResponseWriter, r *http.Request) 
 		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
 		return
 	}
-	// Build the union of dynamic keys. The Go client sends a fixed
-	// Go-http-client UA, which carries no signal, so it is only exported for
-	// fixed-page (browser) reports.
-	keys := []string{"id", "ip"}
+	// The Go client sends a fixed Go-http-client UA, which carries no signal,
+	// so the user agent is only exported for fixed-page (browser) reports.
+	// Client-reported data is passed through the shared writer, which renames
+	// any key that collides with a fixed column (e.g. a reported "ip" against
+	// the connection IP column becomes "ip1") so nothing is dropped.
+	fixedKeys := []string{"id", "ip"}
 	if c.SourceType == models.SourceTypePage {
-		keys = append(keys, "user_agent")
+		fixedKeys = append(fixedKeys, "user_agent")
 	}
-	keys = append(keys, "created_at")
-	seen := map[string]bool{}
-	for _, k := range keys {
-		seen[k] = true
-	}
+	fixedKeys = append(fixedKeys, "created_at")
+	rows := make([]util.CSVRow, 0, len(reports))
 	for _, re := range reports {
-		for k := range re.Data {
-			if !seen[k] {
-				seen[k] = true
-				keys = append(keys, k)
-			}
+		fixed := []interface{}{re.Id, re.IP}
+		if c.SourceType == models.SourceTypePage {
+			fixed = append(fixed, re.UserAgent)
 		}
+		fixed = append(fixed, re.CreatedAt)
+		rows = append(rows, util.CSVRow{Fixed: fixed, Data: re.Data})
 	}
-	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-	safeName := strings.NewReplacer("\"", "_", "\\", "_", "\n", "_", "\r", "_").Replace(c.Name)
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-reports.csv"`, safeName))
-	w.Write([]byte("\uFEFF")) // UTF-8 BOM for Excel compatibility
-	cw := csv.NewWriter(w)
-	_ = cw.Write(keys)
-	colIndex := make(map[string]int, len(keys))
-	for i, k := range keys {
-		colIndex[k] = i
-	}
-	baseIdx := colIndex["created_at"] + 1
-	for _, re := range reports {
-		row := make([]string, len(keys))
-		row[colIndex["id"]] = strconv.FormatInt(re.Id, 10)
-		row[colIndex["ip"]] = re.IP
-		if i, ok := colIndex["user_agent"]; ok {
-			row[i] = re.UserAgent
-		}
-		row[colIndex["created_at"]] = re.CreatedAt.Format(time.RFC3339)
-		for i, k := range keys[baseIdx:] {
-			v := ""
-			if val, ok := re.Data[k]; ok {
-				switch t := val.(type) {
-				case string:
-					v = t
-				case fmt.Stringer:
-					v = t.String()
-				default:
-					v = fmt.Sprintf("%v", t)
-				}
-			}
-			row[i+baseIdx] = sanitizeCSVValue(v)
-		}
-		_ = cw.Write(row)
-	}
-	cw.Flush()
+	writeCSVFile(w, c.Name, "reports", fixedKeys, rows)
 }
 
-// sanitizeCSVValue prevents CSV formula injection by prefixing values that
-// start with characters interpreted as formula indicators by spreadsheet
-// applications (=, +, -, @, tab, carriage return).
-func sanitizeCSVValue(v string) string {
-	if len(v) > 0 {
-		switch v[0] {
-		case '=', '+', '-', '@', '\t', '\r':
-			return "'" + v
-		}
+// writeCSVFile sets the download headers for a CSV export and streams the rows
+// through the shared CSV writer.
+func writeCSVFile(w http.ResponseWriter, baseName, suffix string, fixedKeys []string, rows []util.CSVRow) {
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	safeName := strings.NewReplacer("\"", "_", "\\", "_", "\n", "_", "\r", "_").Replace(baseName)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-%s.csv"`, safeName, suffix))
+	if err := util.WriteCSV(w, fixedKeys, rows); err != nil {
+		log.Error(err)
 	}
-	return v
 }
 
 // CampaignReportSummary returns an aggregated view of page campaign reports,

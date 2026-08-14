@@ -1,13 +1,16 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
 	ctx "github.com/gophish/gophish/context"
 	log "github.com/gophish/gophish/logger"
 	"github.com/gophish/gophish/models"
+	"github.com/gophish/gophish/util"
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
 )
@@ -117,6 +120,112 @@ func (as *Server) CampaignResults(w http.ResponseWriter, r *http.Request) {
 		JSONResponse(w, cr, http.StatusOK)
 		return
 	}
+}
+
+// CampaignResultsExport downloads the campaign results as a CSV file.
+func (as *Server) CampaignResultsExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		return
+	}
+	vars := mux.Vars(r)
+	id, _ := strconv.ParseInt(vars["id"], 0, 64)
+	cr, err := models.GetCampaignResults(id, ctx.Get(r, "user_id").(int64), models.PageParams{})
+	if err != nil {
+		log.Error(err)
+		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+		return
+	}
+	fixedKeys := []string{"id", "smtp_id", "status", "ip", "latitude", "longitude", "send_date", "reported", "modified_date", "smtp_from_address", "email", "full_name", "position"}
+	if len(cr.Results) > 0 {
+		// Mirror the original frontend export, which derived the CSV columns from
+		// Object.keys() on the first result record (i.e. the JSON field order).
+		if keys, err := jsonKeys(cr.Results[0]); err == nil && len(keys) > 0 {
+			fixedKeys = keys
+		}
+	}
+	rows := make([]util.CSVRow, 0, len(cr.Results))
+	for i := range cr.Results {
+		row := util.CSVRow{Fixed: make([]interface{}, len(fixedKeys))}
+		if m, err := resultMap(&cr.Results[i]); err == nil {
+			for j, k := range fixedKeys {
+				row.Fixed[j] = m[k]
+			}
+		}
+		rows = append(rows, row)
+	}
+	writeCSVFile(w, cr.Name, "results", fixedKeys, rows)
+}
+
+// jsonKeys returns the keys of a JSON-serialized struct in serialization order,
+// matching Object.keys() on the parsed JSON object in the browser.
+func jsonKeys(v interface{}) ([]string, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	tok, err := dec.Token()
+	if err != nil {
+		return nil, err
+	}
+	if d, ok := tok.(json.Delim); !ok || d != '{' {
+		return nil, errors.New("expected JSON object")
+	}
+	var keys []string
+	for dec.More() {
+		keyTok, err := dec.Token()
+		if err != nil {
+			return nil, err
+		}
+		key, ok := keyTok.(string)
+		if !ok {
+			return nil, errors.New("expected JSON object key")
+		}
+		keys = append(keys, key)
+		var raw json.RawMessage
+		if err := dec.Decode(&raw); err != nil {
+			return nil, err
+		}
+	}
+	return keys, nil
+}
+
+// resultMap converts a Result into a map keyed by its JSON field names so that
+// CSV columns can be filled positionally.
+func resultMap(res *models.Result) (map[string]interface{}, error) {
+	b, err := json.Marshal(res)
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]interface{}{}
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// CampaignEventsExport downloads the campaign timeline events as a CSV file.
+func (as *Server) CampaignEventsExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		return
+	}
+	vars := mux.Vars(r)
+	id, _ := strconv.ParseInt(vars["id"], 0, 64)
+	cr, err := models.GetCampaignResults(id, ctx.Get(r, "user_id").(int64), models.PageParams{})
+	if err != nil {
+		log.Error(err)
+		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+		return
+	}
+	fixedKeys := []string{"campaign_id", "email", "time", "message", "details"}
+	rows := make([]util.CSVRow, 0, len(cr.Events))
+	for i := range cr.Events {
+		e := &cr.Events[i]
+		rows = append(rows, util.CSVRow{Fixed: []interface{}{e.CampaignId, e.Email, e.Time, e.Message, e.Details}})
+	}
+	writeCSVFile(w, cr.Name, "events", fixedKeys, rows)
 }
 
 // CampaignSummary returns the summary for a given campaign.

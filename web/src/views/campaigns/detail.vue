@@ -241,7 +241,9 @@
     <a-card v-else title="上报数据" style="margin: 16px 24px">
       <template #extra>
         <a-space>
-          <a-button size="small" @click="exportReports">导出上报CSV</a-button>
+          <a-button size="small" @click="exportCSV('reports')"
+            >导出上报CSV</a-button
+          >
         </a-space>
       </template>
       <a-table
@@ -482,10 +484,7 @@
             <a-empty v-else description="无采集字段" />
           </div>
         </a-timeline-item>
-        <a-empty
-          v-if="!reportTimeline.length"
-          description="暂无上报记录"
-        />
+        <a-empty v-if="!reportTimeline.length" description="暂无上报记录" />
       </a-timeline>
     </a-drawer>
   </div>
@@ -513,6 +512,8 @@ import {
   getCampaignReports,
   getCampaignReportSummary,
   exportCampaignReports,
+  exportCampaignResults,
+  exportCampaignEvents,
 } from "@/api/campaigns";
 import QRCode from "qrcode";
 import { formatDate } from "@/utils/format";
@@ -557,9 +558,7 @@ const reportTimeline = computed(() => {
   const d = reportDetail.value;
   if (!d) return [];
   const subs =
-    Array.isArray(d.submissions) && d.submissions.length
-      ? d.submissions
-      : null;
+    Array.isArray(d.submissions) && d.submissions.length ? d.submissions : null;
   if (subs) {
     return subs.map((s: any) => {
       const rows: { key: string; value: string }[] = [];
@@ -742,20 +741,37 @@ function showReportDetails(record: any) {
   reportDrawerVisible.value = true;
 }
 
-async function exportReports() {
+function downloadCSVBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+async function exportCSV(scope: string) {
+  const id = Number(route.params.id);
+  let blob: any;
+  let filename: string;
   try {
-    const blob: any = await exportCampaignReports(Number(route.params.id));
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", `${campaign.value.name} - 上报.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    if (scope === "reports") {
+      blob = await exportCampaignReports(id);
+      filename = `${campaign.value.name} - 上报.csv`;
+    } else if (scope === "results") {
+      blob = await exportCampaignResults(id);
+      filename = `${campaign.value.name} - 结果.csv`;
+    } else {
+      blob = await exportCampaignEvents(id);
+      filename = `${campaign.value.name} - 事件.csv`;
+    }
   } catch (error) {
     message.error("导出失败");
+    return;
   }
+  downloadCSVBlob(blob, filename);
 }
 
 async function showClientCode() {
@@ -830,57 +846,6 @@ function showRecipientTimeline(record: any) {
         new Date(a.time).getTime() - new Date(b.time).getTime(),
     );
   drawerVisible.value = true;
-}
-
-async function exportCSV(scope: string) {
-  let data: any[];
-  let filename: string;
-  if (scope === "results") {
-    try {
-      const full = await getCampaignResults(Number(route.params.id));
-      data = full.results || [];
-    } catch {
-      message.error("导出结果失败");
-      return;
-    }
-    filename = `${campaign.value.name} - 结果.csv`;
-  } else {
-    data = allTimeline.value;
-    filename = `${campaign.value.name} - 事件.csv`;
-  }
-  if (!data || data.length === 0) {
-    message.warning("没有数据可导出");
-    return;
-  }
-  const keys = Object.keys(data[0]);
-  const csvRows = [keys.join(",")];
-  for (const row of data) {
-    csvRows.push(
-      keys
-        .map((k) => {
-          const val = row[k];
-          if (val === null || val === undefined) return "";
-          const str = String(val);
-          if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-            return `"${str.replace(/"/g, '""')}"`;
-          }
-          return str;
-        })
-        .join(","),
-    );
-  }
-  const csvContent = csvRows.join("\r\n");
-  const blob = new Blob(["\uFEFF" + csvContent], {
-    type: "text/csv;charset=utf-8;",
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute("download", filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
 }
 
 function initChart() {

@@ -761,7 +761,9 @@ func GetCampaignResults(id int64, uid int64, pp PageParams) (CampaignResults, er
 		return cr, err
 	}
 	query := readDB().Table("results").Where("campaign_id=? and user_id=?", cr.Id, uid).Order("id ASC")
-	query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
 	err = query.Find(&cr.Results).Error
 	if err != nil {
 		log.Errorf("%s: results not found for campaign", err)

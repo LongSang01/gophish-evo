@@ -85,6 +85,8 @@ func (as *Server) registerRoutes() {
 	protected.HandleFunc("/campaigns/dashboard-stats", as.DashboardStats)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}", as.Campaign)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/results", as.CampaignResults)
+	protected.HandleFunc("/campaigns/{id:[0-9]+}/results/export", as.CampaignResultsExport)
+	protected.HandleFunc("/campaigns/{id:[0-9]+}/events/export", as.CampaignEventsExport)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/summary", as.CampaignSummary)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/complete", as.CampaignComplete)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/launch", as.CampaignLaunch)

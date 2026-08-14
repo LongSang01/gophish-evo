@@ -81,3 +81,17 @@ export function exportCampaignReports(id: number): Promise<void> {
     responseType: "blob",
   });
 }
+
+export function exportCampaignResults(id: number): Promise<void> {
+  return defHttp.get({
+    url: `${Api.Campaigns}/${id}/results/export`,
+    responseType: "blob",
+  });
+}
+
+export function exportCampaignEvents(id: number): Promise<void> {
+  return defHttp.get({
+    url: `${Api.Campaigns}/${id}/events/export`,
+    responseType: "blob",
+  });
+}
