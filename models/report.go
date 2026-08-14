@@ -335,7 +335,7 @@ type ReportSummaryRow struct {
 // (page_click_stats) to produce a unified view:
 //
 //   - Submitted visitors (have reports_ext records): one row per vid with
-//     ClickCount = total clicks - submission count.
+//     ClickCount = total page opens (from page_click_stats).
 //   - Click-only visitors (have page_click_stats but no reports_ext):
 //     one row per vid with SubmissionCount = 0.
 //   - Legacy records (no vid, vid == ”): each record is its own row.
@@ -401,10 +401,6 @@ func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryR
 		if cs, ok := clickMap[vid]; ok {
 			totalClicks = cs.ClickCount
 		}
-		clickOnly := totalClicks - int64(len(g.reports))
-		if clickOnly < 0 {
-			clickOnly = 0
-		}
 
 		var lastClickAt time.Time
 		if cs, ok := clickMap[vid]; ok {
@@ -418,7 +414,7 @@ func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryR
 			UserAgent:       last.UserAgent,
 			Submitted:       true,
 			SubmissionCount: int64(len(g.reports)),
-			ClickCount:      clickOnly,
+			ClickCount:      totalClicks,
 			LastClickAt:     lastClickAt,
 			ReportExtId:     last.Id,
 			DataJSON:        last.DataJSON,

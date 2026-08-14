@@ -436,7 +436,7 @@ func (s *ModelsSuite) TestReportSummarySubmittedWithClicks(c *check.C) {
 	c.Assert(len(rows), check.Equals, 1)
 	c.Assert(rows[0].Submitted, check.Equals, true)
 	c.Assert(rows[0].SubmissionCount, check.Equals, int64(1))
-	c.Assert(rows[0].ClickCount, check.Equals, int64(4)) // 5 - 1 = 4
+	c.Assert(rows[0].ClickCount, check.Equals, int64(5))
 	c.Assert(rows[0].Vid, check.Equals, "vid-alice")
 }
 
@@ -485,7 +485,7 @@ func (s *ModelsSuite) TestReportSummaryMixed(c *check.C) {
 	// Submitted visitors should come first.
 	c.Assert(rows[0].Submitted, check.Equals, true)
 	c.Assert(rows[0].Vid, check.Equals, "vid-a")
-	c.Assert(rows[0].ClickCount, check.Equals, int64(2)) // 3 - 1 = 2
+	c.Assert(rows[0].ClickCount, check.Equals, int64(3))
 
 	c.Assert(rows[1].Submitted, check.Equals, false)
 	c.Assert(rows[1].Vid, check.Equals, "vid-b")
