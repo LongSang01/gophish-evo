@@ -128,13 +128,11 @@ func (rc *ReportConfig) Lookup(key string) *ReportField {
 type ReportExt struct {
 	Id         int64     `json:"id"`
 	CampaignId int64     `json:"campaign_id"`
-	Source     string    `json:"source"`
 	Vid        string    `json:"vid"` // Visitor ID for page-type campaigns
 	DataJSON   string    `json:"-"`
 	Data       Map       `json:"data" gorm:"-"`
 	IP         string    `json:"ip"`
 	UserAgent  string    `json:"user_agent"`
-	DedupValue string    `json:"-"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 
@@ -184,14 +182,14 @@ func GetCampaignReportConfig(c *Campaign) (*ReportConfig, error) {
 	return rc, nil
 }
 
-// SaveReportExt validates that the campaign supports reporting and inserts a
-// single report record, skipping insert when the dedup key already exists.
+// SaveReportExt inserts a single report record. For client-type campaigns,
+// duplicate detection is performed at the application level by checking
+// whether a record with the same dedup key value already exists.
 // vid is the visitor identifier for page-type campaigns (may be empty for
 // non-page sources).
-func SaveReportExt(campaignID int64, source string, data Map, rc *ReportConfig, ip, ua, vid string) (*ReportExt, error) {
+func SaveReportExt(campaignID int64, data Map, rc *ReportConfig, ip, ua, vid string) (*ReportExt, error) {
 	re := &ReportExt{
 		CampaignId: campaignID,
-		Source:     source,
 		Vid:        vid,
 		Data:       data,
 		IP:         ip,
@@ -203,46 +201,41 @@ func SaveReportExt(campaignID int64, source string, data Map, rc *ReportConfig, 
 	}
 	re.DataJSON = string(dataJSON)
 	re.CreatedAt = time.Now().UTC()
+
+	// For client-type campaigns with a dedup key configured, check for
+	// existing records with the same dedup value before inserting.
 	if rc != nil && rc.DedupKey != "" {
 		if v, ok := data[rc.DedupKey]; ok && v != nil {
-			re.DedupValue = fmt.Sprintf("%v", v)
-		} else {
-			// The dedup field is not present in the reported data (e.g. a
-			// page campaign whose form has no "mac" field).  Use a
-			// cryptographically random value so every submission is stored
-			// instead of being rejected by the unique index.
-			buf := make([]byte, 8)
-			rand.Read(buf)
-			re.DedupValue = fmt.Sprintf("auto-%d-%x", campaignID, buf)
+			dedupVal := fmt.Sprintf("%v", v)
+			var count int64
+			if err := db.Table("reports_ext").Where(
+				"campaign_id=? AND data_json LIKE ?",
+				campaignID, "%\""+rc.DedupKey+"\":"+fmt.Sprintf("%q", dedupVal)+"%").
+				Count(&count).Error; err != nil {
+				return nil, err
+			}
+			if count > 0 {
+				return nil, nil // duplicate, skip
+			}
 		}
-	} else {
-		// No dedup key configured (e.g. page campaigns).  Generate a unique
-		// value so every submission is stored independently.
-		buf := make([]byte, 8)
-		rand.Read(buf)
-		re.DedupValue = fmt.Sprintf("auto-%d-%x", campaignID, buf)
 	}
+
 	if err := db.Create(re).Error; err != nil {
-		if isDuplicateKeyError(err) {
-			// Idempotent retry - the record already exists.
-			return nil, nil
-		}
 		return nil, err
 	}
 	return re, nil
 }
 
-// SaveReportExtBatch inserts a batch of report records. Records whose
-// (campaign_id, source, dedup_value) already exist are skipped so concurrent
-// client retries do not produce duplicates. vid is the visitor identifier
-// for page-type campaigns.
-func SaveReportExtBatch(campaignID int64, source string, records []Map, rc *ReportConfig, ip, ua, vid string) (int, error) {
+// SaveReportExtBatch inserts a batch of report records. For client-type
+// campaigns with a dedup key, duplicates are detected at the application
+// level. vid is the visitor identifier for page-type campaigns.
+func SaveReportExtBatch(campaignID int64, records []Map, rc *ReportConfig, ip, ua, vid string) (int, error) {
 	inserted := 0
 	for _, data := range records {
 		if len(data) == 0 {
 			continue
 		}
-		re, err := SaveReportExt(campaignID, source, data, rc, ip, ua, vid)
+		re, err := SaveReportExt(campaignID, data, rc, ip, ua, vid)
 		if err != nil {
 			return inserted, err
 		}
@@ -251,14 +244,6 @@ func SaveReportExtBatch(campaignID int64, source string, records []Map, rc *Repo
 		}
 	}
 	return inserted, nil
-}
-
-func isDuplicateKeyError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "unique") || strings.Contains(msg, "duplicate") || strings.Contains(msg, "unique constraint")
 }
 
 // GetCampaignReports returns the report records for a campaign, optionally
@@ -311,8 +296,6 @@ func GetCampaignReportCount(campaignID int64) (int64, error) {
 }
 
 // ReportSummaryRow represents a single row in the aggregated report view.
-// For submitted visitors: ClickCount = TotalClicks - SubmissionCount.
-// For click-only visitors: ClickCount = TotalClicks, SubmissionCount = 0.
 type ReportSummaryRow struct {
 	Source          string    `json:"source"`
 	Vid             string    `json:"vid"`
@@ -348,7 +331,7 @@ func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryR
 
 	// 1. Load all reports_ext for this campaign.
 	var reports []ReportExt
-	if err := readDB().Where("campaign_id=? AND source=?", campaignID, SourceTypePage).
+	if err := readDB().Where("campaign_id=?", campaignID).
 		Order("id ASC").Find(&reports).Error; err != nil {
 		return nil, 0, err
 	}
@@ -408,7 +391,7 @@ func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryR
 		}
 
 		rows = append(rows, ReportSummaryRow{
-			Source:          last.Source,
+			Source:          SourceTypePage,
 			Vid:             vid,
 			IP:              last.IP,
 			UserAgent:       last.UserAgent,
@@ -434,7 +417,7 @@ func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryR
 			m = Map{}
 		}
 		rows = append(rows, ReportSummaryRow{
-			Source:          r.Source,
+			Source:          SourceTypePage,
 			Vid:             "",
 			IP:              r.IP,
 			UserAgent:       r.UserAgent,
@@ -458,7 +441,6 @@ func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryR
 		rows = append(rows, ReportSummaryRow{
 			Source:          SourceTypePage,
 			Vid:             vid,
-			IP:              cs.IP,
 			Submitted:       false,
 			SubmissionCount: 0,
 			ClickCount:      cs.ClickCount,

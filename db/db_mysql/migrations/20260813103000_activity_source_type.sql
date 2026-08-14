@@ -9,13 +9,12 @@ ALTER TABLE campaigns ADD COLUMN report_salt VARCHAR(64) NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS reports_ext (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY,
     campaign_id BIGINT NOT NULL,
-    source      VARCHAR(20) NOT NULL,
+    vid         VARCHAR(64) DEFAULT '',
     data_json   TEXT NOT NULL,
     ip          VARCHAR(64),
     user_agent  VARCHAR(512),
-    dedup_value VARCHAR(255),
     created_at  DATETIME,
-    UNIQUE KEY uniq_reports_ext_dedup (campaign_id, source, dedup_value)
+    INDEX idx_reports_ext_campaign_vid (campaign_id, vid)
 ) ENGINE=InnoDB;
 
 -- +goose Down

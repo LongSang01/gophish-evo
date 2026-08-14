@@ -114,7 +114,7 @@ func (as *Server) CampaignReportsExport(w http.ResponseWriter, r *http.Request) 
 	// Build the union of dynamic keys. The Go client sends a fixed
 	// Go-http-client UA, which carries no signal, so it is only exported for
 	// fixed-page (browser) reports.
-	keys := []string{"id", "source", "ip"}
+	keys := []string{"id", "ip"}
 	if c.SourceType == models.SourceTypePage {
 		keys = append(keys, "user_agent")
 	}
@@ -145,7 +145,6 @@ func (as *Server) CampaignReportsExport(w http.ResponseWriter, r *http.Request) 
 	for _, re := range reports {
 		row := make([]string, len(keys))
 		row[colIndex["id"]] = strconv.FormatInt(re.Id, 10)
-		row[colIndex["source"]] = re.Source
 		row[colIndex["ip"]] = re.IP
 		if i, ok := colIndex["user_agent"]; ok {
 			row[i] = re.UserAgent

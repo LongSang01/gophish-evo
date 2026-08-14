@@ -13,7 +13,6 @@ import (
 type PageClickStats struct {
 	Id          int64     `json:"id" gorm:"primaryKey"`
 	CampaignId  int64     `json:"campaign_id"`
-	IP          string    `json:"ip"`
 	Vid         string    `json:"vid"`
 	ClickCount  int64     `json:"click_count"`
 	FirstSeenAt time.Time `json:"first_seen_at"`
@@ -28,7 +27,6 @@ func (PageClickStats) TableName() string {
 // clickEntry is the in-memory accumulator for a single (campaign_id, vid) pair.
 type clickEntry struct {
 	count      int64
-	ip         string // most recently seen IP
 	lastSeenAt time.Time
 }
 
@@ -56,7 +54,7 @@ type clickCounter struct {
 
 // Incr records a single page open event in memory. It is safe for concurrent
 // use. This function does NOT touch the database.
-func (cc *clickCounter) Incr(campaignID int64, vid, ip string) {
+func (cc *clickCounter) Incr(campaignID int64, vid string) {
 	if vid == "" {
 		return
 	}
@@ -70,16 +68,11 @@ func (cc *clickCounter) Incr(campaignID int64, vid, ip string) {
 	if !ok {
 		cc.entries[key] = &clickEntry{
 			count:      1,
-			ip:         ip,
 			lastSeenAt: now,
 		}
 		return
 	}
 	entry.count++
-	// Always update IP to the most recently seen one.
-	if ip != "" {
-		entry.ip = ip
-	}
 	entry.lastSeenAt = now
 }
 
@@ -114,13 +107,12 @@ func (cc *clickCounter) FlushToDB() error {
 		// Use raw SQL for upsert to support both SQLite and MySQL with
 		// database-specific conflict resolution.
 		_, err := sqlDB.Exec(
-			`INSERT INTO page_click_stats (campaign_id, ip, vid, click_count, first_seen_at, last_seen_at)
-			 VALUES (?, ?, ?, ?, ?, ?)
+			`INSERT INTO page_click_stats (campaign_id, vid, click_count, first_seen_at, last_seen_at)
+			 VALUES (?, ?, ?, ?, ?)
 			 ON CONFLICT(campaign_id, vid) DO UPDATE SET
 			   click_count = click_count + excluded.click_count,
-			   ip = excluded.ip,
 			   last_seen_at = excluded.last_seen_at`,
-			key.campaignID, entry.ip, key.vid, entry.count, now, entry.lastSeenAt,
+			key.campaignID, key.vid, entry.count, now, entry.lastSeenAt,
 		)
 		if err != nil {
 			log.Errorf("click_counter: flush failed for campaign=%d vid=%s: %v",
@@ -148,13 +140,12 @@ func (cc *clickCounter) FlushToDBMySQL() error {
 
 	for key, entry := range snap {
 		_, err := sqlDB.Exec(
-			`INSERT INTO page_click_stats (campaign_id, ip, vid, click_count, first_seen_at, last_seen_at)
-			 VALUES (?, ?, ?, ?, ?, ?)
+			`INSERT INTO page_click_stats (campaign_id, vid, click_count, first_seen_at, last_seen_at)
+			 VALUES (?, ?, ?, ?, ?)
 			 ON DUPLICATE KEY UPDATE
 			   click_count = click_count + VALUES(click_count),
-			   ip = VALUES(ip),
 			   last_seen_at = VALUES(last_seen_at)`,
-			key.campaignID, entry.ip, key.vid, entry.count, now, entry.lastSeenAt,
+			key.campaignID, key.vid, entry.count, now, entry.lastSeenAt,
 		)
 		if err != nil {
 			log.Errorf("click_counter: flush failed for campaign=%d vid=%s: %v",

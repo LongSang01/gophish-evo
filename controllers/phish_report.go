@@ -125,7 +125,7 @@ func (ps *PhishingServer) ReportExtHandler(w http.ResponseWriter, r *http.Reques
 	if len(records) == 0 && req.Data != nil {
 		records = []models.Map{req.Data}
 	}
-	if _, err := models.SaveReportExtBatch(c.Id, req.Source, records, rc, ip, ua, ""); err != nil {
+	if _, err := models.SaveReportExtBatch(c.Id, records, rc, ip, ua, ""); err != nil {
 		log.Error(err)
 		api.JSONResponse(w, models.Response{Success: false, Message: "Failed to store report"}, http.StatusInternalServerError)
 		return
@@ -161,8 +161,7 @@ func (ps *PhishingServer) renderFixedPage(w http.ResponseWriter, r *http.Request
 
 	if r.Method == http.MethodGet {
 		// Record a page open in the in-memory counter.
-		ip := extractClientIP(r)
-		models.ClickCounter.Incr(c.Id, vid, ip)
+		models.ClickCounter.Incr(c.Id, vid)
 	}
 	if r.Method == http.MethodPost {
 		if err := r.ParseForm(); err != nil {
@@ -186,7 +185,7 @@ func (ps *PhishingServer) renderFixedPage(w http.ResponseWriter, r *http.Request
 			if err != nil {
 				log.Error(err)
 			} else {
-				if _, err := models.SaveReportExtBatch(c.Id, models.SourceTypePage, []models.Map{data}, rc, ip, ua, vid); err != nil {
+				if _, err := models.SaveReportExtBatch(c.Id, []models.Map{data}, rc, ip, ua, vid); err != nil {
 					log.Error(err)
 				}
 			}

@@ -120,11 +120,10 @@ func (s *ModelsSuite) TestSaveReportExtBasic(c *check.C) {
 	rc, err := GetCampaignReportConfig(&camp)
 	c.Assert(err, check.IsNil)
 
-	re, err := SaveReportExt(camp.Id, SourceTypeClient, Map{"ip": "1.2.3.4", "mac": "aa:bb:cc:dd:ee:ff"}, rc, "127.0.0.1", "test-ua", "")
+	re, err := SaveReportExt(camp.Id, Map{"ip": "1.2.3.4", "mac": "aa:bb:cc:dd:ee:ff"}, rc, "127.0.0.1", "test-ua", "")
 	c.Assert(err, check.IsNil)
 	c.Assert(re, check.NotNil)
 	c.Assert(re.IP, check.Equals, "127.0.0.1")
-	c.Assert(re.Source, check.Equals, SourceTypeClient)
 }
 
 func (s *ModelsSuite) TestSaveReportExtDedup(c *check.C) {
@@ -133,12 +132,12 @@ func (s *ModelsSuite) TestSaveReportExtDedup(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	data := Map{"ip": "1.2.3.4", "mac": "aa:bb:cc:dd:ee:ff"}
-	re1, err := SaveReportExt(camp.Id, SourceTypeClient, data, rc, "127.0.0.1", "ua", "")
+	re1, err := SaveReportExt(camp.Id, data, rc, "127.0.0.1", "ua", "")
 	c.Assert(err, check.IsNil)
 	c.Assert(re1, check.NotNil)
 
 	// Same MAC → should be skipped (dedup).
-	re2, err := SaveReportExt(camp.Id, SourceTypeClient, Map{"ip": "5.6.7.8", "mac": "aa:bb:cc:dd:ee:ff"}, rc, "127.0.0.1", "ua", "")
+	re2, err := SaveReportExt(camp.Id, Map{"ip": "5.6.7.8", "mac": "aa:bb:cc:dd:ee:ff"}, rc, "127.0.0.1", "ua", "")
 	c.Assert(err, check.IsNil)
 	c.Assert(re2, check.IsNil) // nil means skipped
 
@@ -152,8 +151,8 @@ func (s *ModelsSuite) TestSaveReportExtDifferentDedup(c *check.C) {
 	rc, err := GetCampaignReportConfig(&camp)
 	c.Assert(err, check.IsNil)
 
-	SaveReportExt(camp.Id, SourceTypeClient, Map{"ip": "1.2.3.4", "mac": "aa:bb:cc:dd:ee:01"}, rc, "127.0.0.1", "ua", "")
-	SaveReportExt(camp.Id, SourceTypeClient, Map{"ip": "1.2.3.5", "mac": "aa:bb:cc:dd:ee:02"}, rc, "127.0.0.1", "ua", "")
+	SaveReportExt(camp.Id, Map{"ip": "1.2.3.4", "mac": "aa:bb:cc:dd:ee:01"}, rc, "127.0.0.1", "ua", "")
+	SaveReportExt(camp.Id, Map{"ip": "1.2.3.5", "mac": "aa:bb:cc:dd:ee:02"}, rc, "127.0.0.1", "ua", "")
 
 	total, err := GetCampaignReportCount(camp.Id)
 	c.Assert(err, check.IsNil)
@@ -173,8 +172,8 @@ func (s *ModelsSuite) TestSaveReportExtNoDedupKey(c *check.C) {
 	rc, err := GetCampaignReportConfig(&camp)
 	c.Assert(err, check.IsNil)
 
-	SaveReportExt(camp.Id, SourceTypePage, Map{"username": "a"}, rc, "127.0.0.1", "ua", "vid-test-1")
-	SaveReportExt(camp.Id, SourceTypePage, Map{"username": "b"}, rc, "127.0.0.1", "ua", "vid-test-2")
+	SaveReportExt(camp.Id, Map{"username": "a"}, rc, "127.0.0.1", "ua", "vid-test-1")
+	SaveReportExt(camp.Id, Map{"username": "b"}, rc, "127.0.0.1", "ua", "vid-test-2")
 
 	total, err := GetCampaignReportCount(camp.Id)
 	c.Assert(err, check.IsNil)
@@ -195,7 +194,7 @@ func (s *ModelsSuite) TestSaveReportExtBatch(c *check.C) {
 		{"ip": "1.2.3.5", "mac": "aa:bb:cc:dd:ee:02"},
 		{"ip": "1.2.3.6", "mac": "aa:bb:cc:dd:ee:03"},
 	}
-	inserted, err := SaveReportExtBatch(camp.Id, SourceTypeClient, records, rc, "127.0.0.1", "ua", "")
+	inserted, err := SaveReportExtBatch(camp.Id, records, rc, "127.0.0.1", "ua", "")
 	c.Assert(err, check.IsNil)
 	c.Assert(inserted, check.Equals, 3)
 
@@ -213,7 +212,7 @@ func (s *ModelsSuite) TestSaveReportExtBatchWithDuplicates(c *check.C) {
 		{"ip": "1.2.3.4", "mac": "aa:bb:cc:dd:ee:01"},
 		{"ip": "1.2.3.5", "mac": "aa:bb:cc:dd:ee:01"}, // dup MAC
 	}
-	inserted, err := SaveReportExtBatch(camp.Id, SourceTypeClient, records, rc, "127.0.0.1", "ua", "")
+	inserted, err := SaveReportExtBatch(camp.Id, records, rc, "127.0.0.1", "ua", "")
 	c.Assert(err, check.IsNil)
 	c.Assert(inserted, check.Equals, 1)
 }
@@ -223,7 +222,7 @@ func (s *ModelsSuite) TestSaveReportExtBatchEmptyRecords(c *check.C) {
 	rc, err := GetCampaignReportConfig(&camp)
 	c.Assert(err, check.IsNil)
 
-	inserted, err := SaveReportExtBatch(camp.Id, SourceTypeClient, []Map{}, rc, "127.0.0.1", "ua", "")
+	inserted, err := SaveReportExtBatch(camp.Id, []Map{}, rc, "127.0.0.1", "ua", "")
 	c.Assert(err, check.IsNil)
 	c.Assert(inserted, check.Equals, 0)
 }
@@ -245,7 +244,7 @@ func (s *ModelsSuite) TestGetCampaignReportsWithData(c *check.C) {
 	rc, _ := GetCampaignReportConfig(&camp)
 
 	for i := 0; i < 5; i++ {
-		SaveReportExt(camp.Id, SourceTypeClient, Map{
+		SaveReportExt(camp.Id, Map{
 			"ip":  fmt.Sprintf("10.0.0.%d", i),
 			"mac": fmt.Sprintf("aa:bb:cc:dd:ee:%02x", i),
 		}, rc, "127.0.0.1", "ua", "")
@@ -264,7 +263,7 @@ func (s *ModelsSuite) TestGetCampaignReportsPagination(c *check.C) {
 	rc, _ := GetCampaignReportConfig(&camp)
 
 	for i := 0; i < 10; i++ {
-		SaveReportExt(camp.Id, SourceTypeClient, Map{
+		SaveReportExt(camp.Id, Map{
 			"ip":  fmt.Sprintf("10.0.0.%d", i),
 			"mac": fmt.Sprintf("aa:bb:cc:dd:ee:%02x", i),
 		}, rc, "127.0.0.1", "ua", "")
@@ -290,7 +289,7 @@ func (s *ModelsSuite) TestGetCampaignReportsPagination(c *check.C) {
 func (s *ModelsSuite) TestDeleteCampaignReports(c *check.C) {
 	camp := s.createClientCampaignForReport(c)
 	rc, _ := GetCampaignReportConfig(&camp)
-	SaveReportExt(camp.Id, SourceTypeClient, Map{"ip": "1.2.3.4", "mac": "aa:bb:cc:dd:ee:ff"}, rc, "127.0.0.1", "ua", "")
+	SaveReportExt(camp.Id, Map{"ip": "1.2.3.4", "mac": "aa:bb:cc:dd:ee:ff"}, rc, "127.0.0.1", "ua", "")
 
 	err := DeleteCampaignReports(camp.Id)
 	c.Assert(err, check.IsNil)
@@ -325,21 +324,20 @@ func (s *ModelsSuite) TestReportConfigJSONSerialization(c *check.C) {
 func (s *ModelsSuite) TestClickCounterIncr(c *check.C) {
 	// Reset counter state.
 	counter := &clickCounter{entries: make(map[clickKey]*clickEntry)}
-	counter.Incr(1, "vid-1", "10.0.0.1")
-	counter.Incr(1, "vid-1", "10.0.0.1")
-	counter.Incr(1, "vid-1", "10.0.0.2") // same vid, different IP
+	counter.Incr(1, "vid-1")
+	counter.Incr(1, "vid-1")
+	counter.Incr(1, "vid-1") // same vid, different IP
 
 	counter.mu.Lock()
 	entry := counter.entries[clickKey{campaignID: 1, vid: "vid-1"}]
 	c.Assert(entry, check.NotNil)
 	c.Assert(entry.count, check.Equals, int64(3))
-	c.Assert(entry.ip, check.Equals, "10.0.0.2") // most recent IP
 	counter.mu.Unlock()
 }
 
 func (s *ModelsSuite) TestClickCounterIncrEmptyVid(c *check.C) {
 	counter := &clickCounter{entries: make(map[clickKey]*clickEntry)}
-	counter.Incr(1, "", "10.0.0.1") // empty vid should be ignored
+	counter.Incr(1, "") // empty vid should be ignored
 
 	counter.mu.Lock()
 	c.Assert(len(counter.entries), check.Equals, 0)
@@ -348,8 +346,8 @@ func (s *ModelsSuite) TestClickCounterIncrEmptyVid(c *check.C) {
 
 func (s *ModelsSuite) TestClickCounterSnapshot(c *check.C) {
 	counter := &clickCounter{entries: make(map[clickKey]*clickEntry)}
-	counter.Incr(1, "vid-1", "10.0.0.1")
-	counter.Incr(1, "vid-2", "10.0.0.2")
+	counter.Incr(1, "vid-1")
+	counter.Incr(1, "vid-2")
 
 	snap := counter.snapshot()
 	c.Assert(len(snap), check.Equals, 2)
@@ -369,9 +367,9 @@ func (s *ModelsSuite) TestFlushToDB(c *check.C) {
 
 	// Use a fresh counter to avoid interference from the global singleton.
 	counter := &clickCounter{entries: make(map[clickKey]*clickEntry)}
-	counter.Incr(camp.Id, "vid-flush-1", "10.0.0.1")
-	counter.Incr(camp.Id, "vid-flush-1", "10.0.0.1")
-	counter.Incr(camp.Id, "vid-flush-2", "10.0.0.2")
+	counter.Incr(camp.Id, "vid-flush-1")
+	counter.Incr(camp.Id, "vid-flush-1")
+	counter.Incr(camp.Id, "vid-flush-2")
 
 	err := counter.FlushToDB()
 	c.Assert(err, check.IsNil)
@@ -380,7 +378,6 @@ func (s *ModelsSuite) TestFlushToDB(c *check.C) {
 	stats1, err := GetPageClickStats(camp.Id, "vid-flush-1")
 	c.Assert(err, check.IsNil)
 	c.Assert(stats1.ClickCount, check.Equals, int64(2))
-	c.Assert(stats1.IP, check.Equals, "10.0.0.1")
 
 	stats2, err := GetPageClickStats(camp.Id, "vid-flush-2")
 	c.Assert(err, check.IsNil)
@@ -392,15 +389,15 @@ func (s *ModelsSuite) TestFlushToDBAccumulate(c *check.C) {
 
 	// First flush.
 	counter := &clickCounter{entries: make(map[clickKey]*clickEntry)}
-	counter.Incr(camp.Id, "vid-accum", "10.0.0.1")
-	counter.Incr(camp.Id, "vid-accum", "10.0.0.1")
+	counter.Incr(camp.Id, "vid-accum")
+	counter.Incr(camp.Id, "vid-accum")
 	err := counter.FlushToDB()
 	c.Assert(err, check.IsNil)
 
 	// Second flush with same vid.
-	counter.Incr(camp.Id, "vid-accum", "10.0.0.1")
-	counter.Incr(camp.Id, "vid-accum", "10.0.0.1")
-	counter.Incr(camp.Id, "vid-accum", "10.0.0.1")
+	counter.Incr(camp.Id, "vid-accum")
+	counter.Incr(camp.Id, "vid-accum")
+	counter.Incr(camp.Id, "vid-accum")
 	err = counter.FlushToDB()
 	c.Assert(err, check.IsNil)
 
@@ -423,12 +420,12 @@ func (s *ModelsSuite) TestReportSummarySubmittedWithClicks(c *check.C) {
 	rc, _ := GetCampaignReportConfig(&camp)
 
 	// Simulate: visitor submitted 1 form, clicked 5 times total.
-	SaveReportExt(camp.Id, SourceTypePage, Map{"name": "Alice"}, rc, "10.0.0.1", "ua", "vid-alice")
+	SaveReportExt(camp.Id, Map{"name": "Alice"}, rc, "10.0.0.1", "ua", "vid-alice")
 
 	// Write click stats directly (simulating a flush).
 	sqlDB, _ := db.DB()
-	sqlDB.Exec(`INSERT INTO page_click_stats (campaign_id, ip, vid, click_count, first_seen_at, last_seen_at)
-		VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`, camp.Id, "10.0.0.1", "vid-alice", 5)
+	sqlDB.Exec(`INSERT INTO page_click_stats (campaign_id, vid, click_count, first_seen_at, last_seen_at)
+		VALUES (?, ?, ?, datetime('now'), datetime('now'))`, camp.Id, "vid-alice", 5)
 
 	rows, total, err := GetCampaignReportSummary(camp.Id, PageParams{})
 	c.Assert(err, check.IsNil)
@@ -449,8 +446,8 @@ func (s *ModelsSuite) TestReportSummaryClickOnly(c *check.C) {
 
 	// Only click stats, no submission.
 	sqlDB, _ := db.DB()
-	sqlDB.Exec(`INSERT INTO page_click_stats (campaign_id, ip, vid, click_count, first_seen_at, last_seen_at)
-		VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`, camp.Id, "10.0.0.5", "vid-bob", 3)
+	sqlDB.Exec(`INSERT INTO page_click_stats (campaign_id, vid, click_count, first_seen_at, last_seen_at)
+		VALUES (?, ?, ?, datetime('now'), datetime('now'))`, camp.Id, "vid-bob", 3)
 
 	rows, total, err := GetCampaignReportSummary(camp.Id, PageParams{})
 	c.Assert(err, check.IsNil)
@@ -469,14 +466,14 @@ func (s *ModelsSuite) TestReportSummaryMixed(c *check.C) {
 	rc, _ := GetCampaignReportConfig(&camp)
 
 	// Visitor A: submitted + clicks.
-	SaveReportExt(camp.Id, SourceTypePage, Map{"name": "Alice"}, rc, "10.0.0.1", "ua", "vid-a")
+	SaveReportExt(camp.Id, Map{"name": "Alice"}, rc, "10.0.0.1", "ua", "vid-a")
 	sqlDB, _ := db.DB()
-	sqlDB.Exec(`INSERT INTO page_click_stats (campaign_id, ip, vid, click_count, first_seen_at, last_seen_at)
-		VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`, camp.Id, "10.0.0.1", "vid-a", 3)
+	sqlDB.Exec(`INSERT INTO page_click_stats (campaign_id, vid, click_count, first_seen_at, last_seen_at)
+		VALUES (?, ?, ?, datetime('now'), datetime('now'))`, camp.Id, "vid-a", 3)
 
 	// Visitor B: click-only.
-	sqlDB.Exec(`INSERT INTO page_click_stats (campaign_id, ip, vid, click_count, first_seen_at, last_seen_at)
-		VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`, camp.Id, "10.0.0.2", "vid-b", 7)
+	sqlDB.Exec(`INSERT INTO page_click_stats (campaign_id, vid, click_count, first_seen_at, last_seen_at)
+		VALUES (?, ?, ?, datetime('now'), datetime('now'))`, camp.Id, "vid-b", 7)
 
 	rows, total, err := GetCampaignReportSummary(camp.Id, PageParams{})
 	c.Assert(err, check.IsNil)
@@ -502,7 +499,7 @@ func (s *ModelsSuite) TestReportSummaryPagination(c *check.C) {
 
 	// Create 5 submitted visitors.
 	for i := 0; i < 5; i++ {
-		SaveReportExt(camp.Id, SourceTypePage, Map{"i": i}, rc, "10.0.0.1", "ua", fmt.Sprintf("vid-%d", i))
+		SaveReportExt(camp.Id, Map{"i": i}, rc, "10.0.0.1", "ua", fmt.Sprintf("vid-%d", i))
 	}
 
 	// Page 1, size 2.
@@ -527,8 +524,8 @@ func (s *ModelsSuite) TestReportSummaryLegacyRecords(c *check.C) {
 	rc, _ := GetCampaignReportConfig(&camp)
 
 	// Legacy records with empty vid (each is its own row).
-	SaveReportExt(camp.Id, SourceTypePage, Map{"name": "legacy1"}, rc, "10.0.0.1", "ua", "")
-	SaveReportExt(camp.Id, SourceTypePage, Map{"name": "legacy2"}, rc, "10.0.0.2", "ua", "")
+	SaveReportExt(camp.Id, Map{"name": "legacy1"}, rc, "10.0.0.1", "ua", "")
+	SaveReportExt(camp.Id, Map{"name": "legacy2"}, rc, "10.0.0.2", "ua", "")
 
 	rows, total, err := GetCampaignReportSummary(camp.Id, PageParams{})
 	c.Assert(err, check.IsNil)

@@ -17,15 +17,14 @@ ALTER TABLE campaigns ADD COLUMN report_salt TEXT NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS "reports_ext" (
     "id"          integer primary key autoincrement,
     "campaign_id" bigint NOT NULL,
-    "source"      text NOT NULL,
+    "vid"         text DEFAULT '',
     "data_json"   text NOT NULL DEFAULT '{}',
     "ip"          text,
     "user_agent"  text,
-    "dedup_value" text,
     "created_at"  datetime
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "uniq_reports_ext_dedup" ON "reports_ext" ("campaign_id", "source", "dedup_value");
+CREATE INDEX IF NOT EXISTS "idx_reports_ext_campaign_vid" ON "reports_ext" ("campaign_id", "vid");
 
 -- +goose Down
 DROP TABLE IF EXISTS reports_ext;
