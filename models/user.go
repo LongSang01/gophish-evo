@@ -29,7 +29,7 @@ type User struct {
 // error is thrown.
 func GetUser(id int64) (User, error) {
 	u := User{}
-	err := db.Preload("Role").Where("id=?", id).First(&u).Error
+	err := readDB().Preload("Role").Where("id=?", id).First(&u).Error
 	return u, err
 }
 
@@ -38,12 +38,12 @@ func GetUsers(pp PageParams) ([]User, int64, error) {
 	us := []User{}
 	var total int64
 	if pp.Valid() {
-		if err := db.Table("users").Count(&total).Error; err != nil {
+		if err := readDB().Table("users").Count(&total).Error; err != nil {
 			log.Error(err)
 			return us, 0, err
 		}
 	}
-	query := db.Preload("Role").Order("id DESC")
+	query := readDB().Preload("Role").Order("id DESC")
 	if pp.Valid() {
 		query = query.Limit(pp.PageSize).Offset(pp.Offset())
 	}
@@ -62,7 +62,7 @@ func GetUsers(pp PageParams) ([]User, int64, error) {
 // error is thrown.
 func GetUserByAPIKey(key string) (User, error) {
 	u := User{}
-	err := db.Preload("Role").Where("api_key = ?", key).First(&u).Error
+	err := readDB().Preload("Role").Where("api_key = ?", key).First(&u).Error
 	return u, err
 }
 
@@ -70,7 +70,7 @@ func GetUserByAPIKey(key string) (User, error) {
 // error is thrown.
 func GetUserByUsername(username string) (User, error) {
 	u := User{}
-	err := db.Preload("Role").Where("username = ?", username).First(&u).Error
+	err := readDB().Preload("Role").Where("username = ?", username).First(&u).Error
 	return u, err
 }
 
@@ -89,7 +89,7 @@ func EnsureEnoughAdmins() error {
 		return err
 	}
 	var adminCount int64
-	err = db.Model(&User{}).Where("role_id=?", role.ID).Count(&adminCount).Error
+	err = readDB().Model(&User{}).Where("role_id=?", role.ID).Count(&adminCount).Error
 	if err != nil {
 		return err
 	}

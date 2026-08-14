@@ -97,11 +97,16 @@ func (ps *PhishingServer) Start() {
 			log.Fatal(err)
 		}
 		log.Infof("Starting phishing server at https://%s", ps.config.ListenURL)
-		log.Fatal(ps.server.ListenAndServeTLS(ps.config.CertPath, ps.config.KeyPath))
+		if err := ps.server.ListenAndServeTLS(ps.config.CertPath, ps.config.KeyPath); err != nil && err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+		return
 	}
 	// If TLS isn't configured, just listen on HTTP
 	log.Infof("Starting phishing server at http://%s", ps.config.ListenURL)
-	log.Fatal(ps.server.ListenAndServe())
+	if err := ps.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
 }
 
 // Shutdown attempts to gracefully shutdown the server. It performs a final

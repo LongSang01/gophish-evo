@@ -9,8 +9,8 @@ import (
 	"time"
 
 	log "github.com/gophish/gophish/logger"
-	"gorm.io/gorm"
 	"github.com/oschwald/maxminddb-golang"
+	"gorm.io/gorm"
 )
 
 // geoDatabase is the global MaxMind GeoIP reader, opened once and reused
@@ -50,19 +50,19 @@ type mmGeoPoint struct {
 // Result contains the fields for a result object,
 // which is a representation of a target in a campaign.
 type Result struct {
-	Id           int64     `json:"-"`
-	CampaignId   int64     `json:"-"`
-	UserId       int64     `json:"-"`
-	RId          string    `json:"id"`
-	SMTPId       int64     `json:"smtp_id,omitempty"`
-	Status       string    `json:"status" sql:"not null"`
-	IP           string    `json:"ip"`
-	Latitude     float64   `json:"latitude"`
-	Longitude    float64   `json:"longitude"`
-	SendDate     time.Time `json:"send_date"`
-	Reported     bool      `json:"reported" sql:"not null"`
-	ModifiedDate time.Time `json:"modified_date"`
-	SMTPFromAddress string `json:"smtp_from_address,omitempty" gorm:"-"`
+	Id              int64     `json:"-"`
+	CampaignId      int64     `json:"-"`
+	UserId          int64     `json:"-"`
+	RId             string    `json:"id"`
+	SMTPId          int64     `json:"smtp_id,omitempty"`
+	Status          string    `json:"status" sql:"not null"`
+	IP              string    `json:"ip"`
+	Latitude        float64   `json:"latitude"`
+	Longitude       float64   `json:"longitude"`
+	SendDate        time.Time `json:"send_date"`
+	Reported        bool      `json:"reported" sql:"not null"`
+	ModifiedDate    time.Time `json:"modified_date"`
+	SMTPFromAddress string    `json:"smtp_from_address,omitempty" gorm:"-"`
 	BaseRecipient
 }
 
@@ -231,6 +231,6 @@ func (r *Result) GenerateId(tx *gorm.DB) error {
 // given the ResultId
 func GetResult(rid string) (Result, error) {
 	r := Result{}
-	err := db.Where("r_id=?", rid).First(&r).Error
+	err := readDB().Where("r_id=?", rid).First(&r).Error
 	return r, err
 }

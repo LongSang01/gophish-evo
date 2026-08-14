@@ -142,12 +142,12 @@ func GetSMTPs(uid int64, pp PageParams) ([]SMTP, int64, error) {
 	ss := []SMTP{}
 	var total int64
 	if pp.Valid() {
-		if err := db.Table("smtp").Where("user_id=?", uid).Count(&total).Error; err != nil {
+		if err := readDB().Table("smtp").Where("user_id=?", uid).Count(&total).Error; err != nil {
 			log.Error(err)
 			return ss, 0, err
 		}
 	}
-	query := db.Where("user_id=?", uid).Order("modified_date DESC")
+	query := readDB().Where("user_id=?", uid).Order("modified_date DESC")
 	if pp.Valid() {
 		query = query.Limit(pp.PageSize).Offset(pp.Offset())
 	}
@@ -157,7 +157,7 @@ func GetSMTPs(uid int64, pp PageParams) ([]SMTP, int64, error) {
 		return ss, 0, err
 	}
 	for i := range ss {
-		err = db.Where("smtp_id=?", ss[i].Id).Find(&ss[i].Headers).Error
+		err = readDB().Where("smtp_id=?", ss[i].Id).Find(&ss[i].Headers).Error
 		if err != nil && err != gorm.ErrRecordNotFound {
 			log.Error(err)
 			return ss, 0, err
@@ -172,12 +172,12 @@ func GetSMTPs(uid int64, pp PageParams) ([]SMTP, int64, error) {
 // GetSMTP returns the SMTP, if it exists, specified by the given id and user_id.
 func GetSMTP(id int64, uid int64) (SMTP, error) {
 	s := SMTP{}
-	err := db.Where("user_id=? and id=?", uid, id).First(&s).Error
+	err := readDB().Where("user_id=? and id=?", uid, id).First(&s).Error
 	if err != nil {
 		log.Error(err)
 		return s, err
 	}
-	err = db.Where("smtp_id=?", s.Id).Find(&s.Headers).Error
+	err = readDB().Where("smtp_id=?", s.Id).Find(&s.Headers).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		log.Error(err)
 		return s, err
@@ -188,12 +188,12 @@ func GetSMTP(id int64, uid int64) (SMTP, error) {
 // GetSMTPByName returns the SMTP, if it exists, specified by the given name and user_id.
 func GetSMTPByName(n string, uid int64) (SMTP, error) {
 	s := SMTP{}
-	err := db.Where("user_id=? and name=?", uid, n).First(&s).Error
+	err := readDB().Where("user_id=? and name=?", uid, n).First(&s).Error
 	if err != nil {
 		log.Error(err)
 		return s, err
 	}
-	err = db.Where("smtp_id=?", s.Id).Find(&s.Headers).Error
+	err = readDB().Where("smtp_id=?", s.Id).Find(&s.Headers).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		log.Error(err)
 	}

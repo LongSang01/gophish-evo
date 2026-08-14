@@ -183,7 +183,7 @@ func (c *Campaign) UpdateStatus(s string) error {
 // otherwise run for every tracking or landing page request.
 func GetCampaignForContext(id int64, uid int64) (Campaign, error) {
 	c := Campaign{}
-	err := db.Table("campaigns").
+	err := readDB().Table("campaigns").
 		Select("id, user_id, page_id, status, url, smtp_id, source_type").
 		Where("id=? AND user_id=?", id, uid).First(&c).Error
 	if err != nil {
@@ -192,7 +192,7 @@ func GetCampaignForContext(id int64, uid int64) (Campaign, error) {
 	// Load the primary SMTP so that getFromAddress() returns the configured
 	// "From" address used when rendering the landing page. This mirrors the
 	// behavior of GetCampaign's getDetails().
-	err = db.Table("smtp").Where("id=?", c.SMTPId).First(&c.SMTP).Error
+	err = readDB().Table("smtp").Where("id=?", c.SMTPId).First(&c.SMTP).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return c, err
@@ -231,17 +231,17 @@ func AddEvent(e *Event, campaignID int64) error {
 // indicating the user deleted the attribute (template, smtp, etc.)
 func (c *Campaign) getDetails() error {
 	// Use explicit queries instead of Related() which was removed in GORM v2
-	err := db.Where("campaign_id=?", c.Id).Find(&c.Results).Error
+	err := readDB().Where("campaign_id=?", c.Id).Find(&c.Results).Error
 	if err != nil {
 		log.Warnf("%s: results not found for campaign", err)
 		return err
 	}
-	err = db.Where("campaign_id=?", c.Id).Find(&c.Events).Error
+	err = readDB().Where("campaign_id=?", c.Id).Find(&c.Events).Error
 	if err != nil {
 		log.Warnf("%s: events not found for campaign", err)
 		return err
 	}
-	err = db.Table("templates").Select("id, name, envelope_sender, subject, modified_date").Where("id=?", c.TemplateId).First(&c.Template).Error
+	err = readDB().Table("templates").Select("id, name, envelope_sender, subject, modified_date").Where("id=?", c.TemplateId).First(&c.Template).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return err
@@ -249,12 +249,12 @@ func (c *Campaign) getDetails() error {
 		c.Template = Template{Name: "[Deleted]"}
 		log.Warnf("%s: template not found for campaign", err)
 	}
-	err = db.Select("id, template_id, type, name").Where("template_id=?", c.Template.Id).Find(&c.Template.Attachments).Error
+	err = readDB().Select("id, template_id, type, name").Where("template_id=?", c.Template.Id).Find(&c.Template.Attachments).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		log.Warn(err)
 		return err
 	}
-	err = db.Table("pages").Select("id, user_id, name, html, capture_credentials, capture_passwords, redirect_url, modified_date").Where("id=?", c.PageId).First(&c.Page).Error
+	err = readDB().Table("pages").Select("id, user_id, name, html, capture_credentials, capture_passwords, redirect_url, modified_date").Where("id=?", c.PageId).First(&c.Page).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return err
@@ -262,7 +262,7 @@ func (c *Campaign) getDetails() error {
 		c.Page = Page{Name: "[Deleted]"}
 		log.Warnf("%s: page not found for campaign", err)
 	}
-	err = db.Table("smtp").Where("id=?", c.SMTPId).First(&c.SMTP).Error
+	err = readDB().Table("smtp").Where("id=?", c.SMTPId).First(&c.SMTP).Error
 	if err != nil {
 		// Check if the SMTP was deleted
 		if err != gorm.ErrRecordNotFound {
@@ -271,7 +271,7 @@ func (c *Campaign) getDetails() error {
 		c.SMTP = SMTP{Name: "[Deleted]"}
 		log.Warnf("%s: sending profile not found for campaign", err)
 	}
-	err = db.Where("smtp_id=?", c.SMTP.Id).Find(&c.SMTP.Headers).Error
+	err = readDB().Where("smtp_id=?", c.SMTP.Id).Find(&c.SMTP.Headers).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		log.Warn(err)
 		return err
@@ -339,39 +339,39 @@ func (c *Campaign) generateSendDate(idx int, totalRecipients int) time.Time {
 // It also backfills numbers as appropriate with a running total, so that the values are aggregated.
 func getCampaignStats(cid int64) (CampaignStats, error) {
 	s := CampaignStats{}
-	query := db.Table("results").Where("campaign_id = ?", cid)
+	query := readDB().Table("results").Where("campaign_id = ?", cid)
 	err := query.Count(&s.Total).Error
 	if err != nil {
 		return s, err
 	}
-	if err = db.Table("results").Where("campaign_id = ?", cid).Where("status=?", EventDataSubmit).Count(&s.SubmittedData).Error; err != nil {
+	if err = readDB().Table("results").Where("campaign_id = ?", cid).Where("status=?", EventDataSubmit).Count(&s.SubmittedData).Error; err != nil {
 		return s, err
 	}
-	if err = db.Table("results").Where("campaign_id = ?", cid).Where("status=?", EventClicked).Count(&s.ClickedLink).Error; err != nil {
+	if err = readDB().Table("results").Where("campaign_id = ?", cid).Where("status=?", EventClicked).Count(&s.ClickedLink).Error; err != nil {
 		return s, err
 	}
-	if err = db.Table("results").Where("campaign_id = ?", cid).Where("reported=?", true).Count(&s.EmailReported).Error; err != nil {
+	if err = readDB().Table("results").Where("campaign_id = ?", cid).Where("reported=?", true).Count(&s.EmailReported).Error; err != nil {
 		return s, err
 	}
 	// Every submitted data event implies they clicked the link
 	s.ClickedLink += s.SubmittedData
-	if err = db.Table("results").Where("campaign_id = ?", cid).Where("status=?", EventOpened).Count(&s.OpenedEmail).Error; err != nil {
+	if err = readDB().Table("results").Where("campaign_id = ?", cid).Where("status=?", EventOpened).Count(&s.OpenedEmail).Error; err != nil {
 		return s, err
 	}
 	// Every clicked link event implies they opened the email
 	s.OpenedEmail += s.ClickedLink
-	if err = db.Table("results").Where("campaign_id = ?", cid).Where("status=?", EventSent).Count(&s.EmailsSent).Error; err != nil {
+	if err = readDB().Table("results").Where("campaign_id = ?", cid).Where("status=?", EventSent).Count(&s.EmailsSent).Error; err != nil {
 		return s, err
 	}
 	// Every opened email event implies the email was sent
 	s.EmailsSent += s.OpenedEmail
-	if err = db.Table("results").Where("campaign_id = ?", cid).Where("status=?", Error).Count(&s.Error).Error; err != nil {
+	if err = readDB().Table("results").Where("campaign_id = ?", cid).Where("status=?", Error).Count(&s.Error).Error; err != nil {
 		return s, err
 	}
 
 	// For client/page campaigns, query reports_ext for the actual report count.
 	// Email campaigns never write to reports_ext, so this stays zero for them.
-	if err = db.Table("reports_ext").Where("campaign_id = ?", cid).Count(&s.ReportCount).Error; err != nil {
+	if err = readDB().Table("reports_ext").Where("campaign_id = ?", cid).Count(&s.ReportCount).Error; err != nil {
 		return s, err
 	}
 	// Also populate SubmittedData for client/page campaigns (the email-specific
@@ -380,7 +380,7 @@ func getCampaignStats(cid int64) (CampaignStats, error) {
 		s.SubmittedData = s.ReportCount
 		// page_click_stats unique index (campaign_id, vid) = total unique visitors.
 		var totalVisitors int64
-		if err = db.Table("page_click_stats").Where("campaign_id = ?", cid).Count(&totalVisitors).Error; err != nil {
+		if err = readDB().Table("page_click_stats").Where("campaign_id = ?", cid).Count(&totalVisitors).Error; err != nil {
 			return s, err
 		}
 		s.OpenedEmail = totalVisitors
@@ -390,7 +390,7 @@ func getCampaignStats(cid int64) (CampaignStats, error) {
 	// The page_click_stats table records the total number of page opens
 	// per visitor, flushed from memory periodically.
 	var pageClicks int64
-	if err = db.Table("page_click_stats").Where("campaign_id = ?", cid).Select("COALESCE(SUM(click_count), 0)").Scan(&pageClicks).Error; err != nil {
+	if err = readDB().Table("page_click_stats").Where("campaign_id = ?", cid).Select("COALESCE(SUM(click_count), 0)").Scan(&pageClicks).Error; err != nil {
 		return s, err
 	}
 	s.ClickedLink += pageClicks
@@ -402,11 +402,11 @@ func getCampaignStats(cid int64) (CampaignStats, error) {
 func GetCampaigns(uid int64, pp PageParams) ([]Campaign, int64, error) {
 	cs := []Campaign{}
 	var total int64
-	if err := db.Table("campaigns").Where("user_id=?", uid).Count(&total).Error; err != nil {
+	if err := readDB().Table("campaigns").Where("user_id=?", uid).Count(&total).Error; err != nil {
 		log.Error(err)
 		return cs, 0, err
 	}
-	query := db.Table("campaigns").Where("user_id=?", uid).Order("created_date DESC")
+	query := readDB().Table("campaigns").Where("user_id=?", uid).Order("created_date DESC")
 	query = query.Limit(pp.PageSize).Offset(pp.Offset())
 	err := query.Find(&cs).Error
 	if err != nil {
@@ -428,13 +428,13 @@ func GetCampaignSummaries(uid int64, pp PageParams) (CampaignSummaries, error) {
 	overview := CampaignSummaries{}
 	cs := []CampaignSummary{}
 	var total int64
-	if err := db.Table("campaigns").Where("user_id = ?", uid).Count(&total).Error; err != nil {
+	if err := readDB().Table("campaigns").Where("user_id = ?", uid).Count(&total).Error; err != nil {
 		log.Error(err)
 		return overview, err
 	}
 	overview.Total = total
 	// Get the basic campaign information
-	query := db.Table("campaigns").Where("user_id = ?", uid)
+	query := readDB().Table("campaigns").Where("user_id = ?", uid)
 	query = query.Select("id, name, created_date, launch_date, send_by_date, completed_date, status, source_type")
 	query = query.Order("created_date DESC")
 	query = query.Limit(pp.PageSize).Offset(pp.Offset())
@@ -493,7 +493,7 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 		Error         int64
 	}
 	var row aggRow
-	err := db.Table("results").
+	err := readDB().Table("results").
 		Select(`
 			COUNT(*)                                                      AS total,
 			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS sent,
@@ -521,7 +521,7 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 	}
 
 	// Query reports_ext aggregated count
-	if err = db.Table("reports_ext").
+	if err = readDB().Table("reports_ext").
 		Where("campaign_id IN (SELECT id FROM campaigns WHERE user_id = ?)", uid).
 		Count(&s.ReportCount).Error; err != nil {
 		return resp, err
@@ -530,7 +530,7 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 		s.SubmittedData = s.ReportCount
 		// page_click_stats unique index (campaign_id, vid) = total unique visitors.
 		var totalVisitors int64
-		if err = db.Table("page_click_stats").
+		if err = readDB().Table("page_click_stats").
 			Where("campaign_id IN (SELECT id FROM campaigns WHERE user_id = ?)", uid).
 			Count(&totalVisitors).Error; err != nil {
 			return resp, err
@@ -540,7 +540,7 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 
 	// Add page click stats to ClickedLink for page-type campaigns.
 	var pageClicks int64
-	if err = db.Table("page_click_stats").
+	if err = readDB().Table("page_click_stats").
 		Where("campaign_id IN (SELECT id FROM campaigns WHERE user_id = ? AND source_type = ?)", uid, SourceTypePage).
 		Select("COALESCE(SUM(click_count), 0)").
 		Scan(&pageClicks).Error; err != nil {
@@ -565,7 +565,7 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 		Error         int64
 	}
 	var rows []timelineRow
-	err = db.Table("campaigns c").
+	err = readDB().Table("campaigns c").
 		Select(`
 			c.id, c.name, c.created_date, c.status,
 			COUNT(r.id)                                                      AS total,
@@ -602,21 +602,21 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 			Error:         r_.Error,
 		}
 		// Query per-campaign report count (lightweight COUNT)
-		if err = db.Table("reports_ext").Where("campaign_id = ?", r_.Id).Count(&entry.ReportCount).Error; err != nil {
+		if err = readDB().Table("reports_ext").Where("campaign_id = ?", r_.Id).Count(&entry.ReportCount).Error; err != nil {
 			return resp, err
 		}
 		if entry.ReportCount > 0 && entry.SubmittedData == 0 {
 			entry.SubmittedData = entry.ReportCount
 			// page_click_stats unique index (campaign_id, vid) = total unique visitors.
 			var totalVisitors int64
-			if err = db.Table("page_click_stats").Where("campaign_id = ?", r_.Id).Count(&totalVisitors).Error; err != nil {
+			if err = readDB().Table("page_click_stats").Where("campaign_id = ?", r_.Id).Count(&totalVisitors).Error; err != nil {
 				return resp, err
 			}
 			entry.OpenedEmail = totalVisitors
 		}
 		// Add page click stats for this campaign.
 		var campaignPageClicks int64
-		if err = db.Table("page_click_stats").Where("campaign_id = ?", r_.Id).
+		if err = readDB().Table("page_click_stats").Where("campaign_id = ?", r_.Id).
 			Select("COALESCE(SUM(click_count), 0)").Scan(&campaignPageClicks).Error; err != nil {
 			return resp, err
 		}
@@ -630,7 +630,7 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 // GetCampaignSummary gets the summary object for a campaign specified by the campaign ID
 func GetCampaignSummary(id int64, uid int64) (CampaignSummary, error) {
 	cs := CampaignSummary{}
-	query := db.Table("campaigns").Where("user_id = ? AND id = ?", uid, id)
+	query := readDB().Table("campaigns").Where("user_id = ? AND id = ?", uid, id)
 	query = query.Select("id, name, created_date, launch_date, send_by_date, completed_date, status, source_type")
 	// GORM v2: Scan does not return ErrRecordNotFound for zero rows; use First instead
 	err := query.First(&cs).Error
@@ -656,23 +656,23 @@ func GetCampaignSummary(id int64, uid int64) (CampaignSummary, error) {
 // ref: #1726
 func GetCampaignMailContext(id int64, uid int64) (Campaign, error) {
 	c := Campaign{}
-	err := db.Where("id = ?", id).Where("user_id = ?", uid).First(&c).Error
+	err := readDB().Where("id = ?", id).Where("user_id = ?", uid).First(&c).Error
 	if err != nil {
 		return c, err
 	}
-	err = db.Table("smtp").Where("id=?", c.SMTPId).First(&c.SMTP).Error
+	err = readDB().Table("smtp").Where("id=?", c.SMTPId).First(&c.SMTP).Error
 	if err != nil {
 		return c, err
 	}
-	err = db.Where("smtp_id=?", c.SMTP.Id).Find(&c.SMTP.Headers).Error
+	err = readDB().Where("smtp_id=?", c.SMTP.Id).Find(&c.SMTP.Headers).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return c, err
 	}
-	err = db.Table("templates").Where("id=?", c.TemplateId).First(&c.Template).Error
+	err = readDB().Table("templates").Where("id=?", c.TemplateId).First(&c.Template).Error
 	if err != nil {
 		return c, err
 	}
-	err = db.Where("template_id=?", c.Template.Id).Find(&c.Template.Attachments).Error
+	err = readDB().Where("template_id=?", c.Template.Id).Find(&c.Template.Attachments).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return c, err
 	}
@@ -688,7 +688,7 @@ func GetCampaignMailContext(id int64, uid int64) (Campaign, error) {
 // GetCampaign returns the campaign, if it exists, specified by the given id and user_id.
 func GetCampaign(id int64, uid int64) (Campaign, error) {
 	c := Campaign{}
-	err := db.Where("id = ?", id).Where("user_id = ?", uid).First(&c).Error
+	err := readDB().Where("id = ?", id).Where("user_id = ?", uid).First(&c).Error
 	if err != nil {
 		log.Errorf("%s: campaign not found", err)
 		return c, err
@@ -701,7 +701,7 @@ func GetCampaign(id int64, uid int64) (Campaign, error) {
 // given campaign.
 func GetCampaignResults(id int64, uid int64, pp PageParams) (CampaignResults, error) {
 	cr := CampaignResults{}
-	err := db.Table("campaigns").Where("id=? and user_id=?", id, uid).First(&cr).Error
+	err := readDB().Table("campaigns").Where("id=? and user_id=?", id, uid).First(&cr).Error
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"campaign_id": id,
@@ -709,18 +709,18 @@ func GetCampaignResults(id int64, uid int64, pp PageParams) (CampaignResults, er
 		}).Error(err)
 		return cr, err
 	}
-	if err := db.Table("results").Where("campaign_id=? and user_id=?", cr.Id, uid).Count(&cr.Total).Error; err != nil {
+	if err := readDB().Table("results").Where("campaign_id=? and user_id=?", cr.Id, uid).Count(&cr.Total).Error; err != nil {
 		log.Errorf("%s: results not found for campaign", err)
 		return cr, err
 	}
-	query := db.Table("results").Where("campaign_id=? and user_id=?", cr.Id, uid).Order("id ASC")
+	query := readDB().Table("results").Where("campaign_id=? and user_id=?", cr.Id, uid).Order("id ASC")
 	query = query.Limit(pp.PageSize).Offset(pp.Offset())
 	err = query.Find(&cr.Results).Error
 	if err != nil {
 		log.Errorf("%s: results not found for campaign", err)
 		return cr, err
 	}
-	err = db.Table("events").Where("campaign_id=?", cr.Id).Find(&cr.Events).Error
+	err = readDB().Table("events").Where("campaign_id=?", cr.Id).Find(&cr.Events).Error
 	if err != nil {
 		log.Errorf("%s: events not found for campaign", err)
 		return cr, err
@@ -746,7 +746,7 @@ func GetCampaignResults(id int64, uid int64, pp PageParams) (CampaignResults, er
 // GetQueuedCampaigns returns the campaigns that are queued up for this given minute
 func GetQueuedCampaigns(t time.Time) ([]Campaign, error) {
 	cs := []Campaign{}
-	err := db.Where("launch_date <= ?", t).
+	err := readDB().Where("launch_date <= ?", t).
 		Where("status = ?", CampaignQueued).Find(&cs).Error
 	if err != nil {
 		log.Error(err)

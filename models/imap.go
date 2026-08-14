@@ -104,7 +104,7 @@ func (im *IMAP) Validate() error {
 func GetIMAP(uid int64) ([]IMAP, error) {
 	im := []IMAP{}
 	var count int64
-	err := db.Where("user_id=?", uid).Find(&im).Count(&count).Error
+	err := readDB().Where("user_id=?", uid).Find(&im).Count(&count).Error
 
 	if err != nil {
 		log.Error(err)

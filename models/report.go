@@ -266,7 +266,7 @@ func isDuplicateKeyError(err error) bool {
 func GetCampaignReports(campaignID int64, pp PageParams) ([]ReportExt, int64, error) {
 	reports := []ReportExt{}
 	var total int64
-	query := db.Table("reports_ext").Where("campaign_id=?", campaignID)
+	query := readDB().Table("reports_ext").Where("campaign_id=?", campaignID)
 	if pp.Valid() {
 		if err := query.Count(&total).Error; err != nil {
 			log.Error(err)
@@ -306,7 +306,7 @@ func DeleteCampaignReports(campaignID int64) error {
 // GetCampaignReportCount returns the number of report records for a campaign.
 func GetCampaignReportCount(campaignID int64) (int64, error) {
 	var total int64
-	err := db.Table("reports_ext").Where("campaign_id=?", campaignID).Count(&total).Error
+	err := readDB().Table("reports_ext").Where("campaign_id=?", campaignID).Count(&total).Error
 	return total, err
 }
 
@@ -348,14 +348,14 @@ func GetCampaignReportSummary(campaignID int64, pp PageParams) ([]ReportSummaryR
 
 	// 1. Load all reports_ext for this campaign.
 	var reports []ReportExt
-	if err := db.Where("campaign_id=? AND source=?", campaignID, SourceTypePage).
+	if err := readDB().Where("campaign_id=? AND source=?", campaignID, SourceTypePage).
 		Order("id ASC").Find(&reports).Error; err != nil {
 		return nil, 0, err
 	}
 
 	// 2. Load all page_click_stats for this campaign.
 	var clickStats []PageClickStats
-	if err := db.Where("campaign_id=?", campaignID).Find(&clickStats).Error; err != nil {
+	if err := readDB().Where("campaign_id=?", campaignID).Find(&clickStats).Error; err != nil {
 		return nil, 0, err
 	}
 
@@ -538,7 +538,7 @@ func sortSummaryRows(rows []ReportSummaryRow) {
 // rather than scanning all campaigns.
 func GetPageCampaignByPath(path string) (*Campaign, error) {
 	cs := []Campaign{}
-	if err := db.Where("source_type=?", SourceTypePage).Find(&cs).Error; err != nil {
+	if err := readDB().Where("source_type=?", SourceTypePage).Find(&cs).Error; err != nil {
 		return nil, err
 	}
 	for i := range cs {
@@ -559,7 +559,7 @@ func GetPageCampaignByPath(path string) (*Campaign, error) {
 // treated as not found so no new data can be submitted.
 func GetCampaignForReport(id int64) (*Campaign, error) {
 	c := Campaign{}
-	err := db.Table("campaigns").
+	err := readDB().Table("campaigns").
 		Select("id, user_id, page_id, status, url, source_type, report_config_json, report_salt").
 		Where("id=? AND status=?", id, CampaignInProgress).First(&c).Error
 	if err != nil {

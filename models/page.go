@@ -93,12 +93,12 @@ func GetPages(uid int64, pp PageParams) ([]Page, int64, error) {
 	ps := []Page{}
 	var total int64
 	if pp.Valid() {
-		if err := db.Table("pages").Where("user_id=?", uid).Count(&total).Error; err != nil {
+		if err := readDB().Table("pages").Where("user_id=?", uid).Count(&total).Error; err != nil {
 			log.Error(err)
 			return ps, 0, err
 		}
 	}
-	query := db.Where("user_id=?", uid).Order("modified_date DESC")
+	query := readDB().Where("user_id=?", uid).Order("modified_date DESC")
 	if pp.Valid() {
 		query = query.Limit(pp.PageSize).Offset(pp.Offset())
 	}
@@ -116,7 +116,7 @@ func GetPages(uid int64, pp PageParams) ([]Page, int64, error) {
 // GetPage returns the page, if it exists, specified by the given id and user_id.
 func GetPage(id int64, uid int64) (Page, error) {
 	p := Page{}
-	err := db.Where("user_id=? and id=?", uid, id).First(&p).Error
+	err := readDB().Where("user_id=? and id=?", uid, id).First(&p).Error
 	if err != nil {
 		log.Error(err)
 	}
@@ -126,7 +126,7 @@ func GetPage(id int64, uid int64) (Page, error) {
 // GetPageByName returns the page, if it exists, specified by the given name and user_id.
 func GetPageByName(n string, uid int64) (Page, error) {
 	p := Page{}
-	err := db.Where("user_id=? and name=?", uid, n).First(&p).Error
+	err := readDB().Where("user_id=? and name=?", uid, n).First(&p).Error
 	if err != nil {
 		log.Error(err)
 	}

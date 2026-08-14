@@ -28,6 +28,32 @@ var db *gorm.DB
 var readerDB *gorm.DB // separate reader connection for SQLite read-write splitting
 var conf *config.Config
 
+// defaultReaderMaxConns is the default MaxOpenConns for the reader connection
+// when the user does not specify db_reader_max_conns in config.json.
+// SQLite in WAL mode supports multiple concurrent readers without blocking the
+// single writer, so a modest pool size (5) significantly improves read
+// throughput compared to the previous MaxOpenConns(1).
+const defaultReaderMaxConns = 5
+
+// isOnDiskSQLite reports whether the configured database is a file-based
+// SQLite database (as opposed to MySQL or :memory: SQLite). Both the
+// startup WAL checkpoint and the reader connection are only relevant for
+// on-disk SQLite.
+func isOnDiskSQLite() bool {
+	return conf != nil && conf.DBName != "mysql" && !strings.HasPrefix(conf.DBPath, ":memory:")
+}
+
+// readDB returns the connection used for read-only queries. Falls back to
+// the writer connection when no dedicated reader is configured (e.g. MySQL,
+// in-memory test databases), so callers don't need to know which mode is
+// active.
+func readDB() *gorm.DB {
+	if readerDB != nil {
+		return readerDB
+	}
+	return db
+}
+
 // CloseDB closes both writer and reader database connections gracefully.
 // For SQLite, it explicitly triggers a WAL checkpoint (TRUNCATE mode) so
 // that all data in the WAL file is flushed to the main .db file.
@@ -51,22 +77,26 @@ func CloseDB() {
 		readerDB = nil
 	}
 
-	// 2. Explicit WAL checkpoint BEFORE closing the writer connection.
+	// 2. Get the underlying sql.DB — needed for both checkpoint and close.
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Errorf("failed to get underlying sql.DB: %v", err)
+		return
+	}
+
+	// 3. Explicit WAL checkpoint BEFORE closing the writer connection.
+	//    Use the raw *sql.DB.Exec instead of GORM's db.Exec because GORM v2
+	//    may wrap PRAGMA statements in ways that prevent proper execution.
 	//    TRUNCATE mode resets the WAL file to zero bytes after checkpoint.
-	if conf != nil && conf.DBName != "mysql" {
-		if err := db.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error; err != nil {
+	if isOnDiskSQLite() {
+		if _, err := sqlDB.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
 			log.Warnf("WAL checkpoint failed (non-fatal): %v", err)
 		} else {
 			log.Info("SQLite WAL checkpoint completed")
 		}
 	}
 
-	// 3. Close the main writer connection pool.
-	sqlDB, err := db.DB()
-	if err != nil {
-		log.Errorf("failed to get underlying sql.DB: %v", err)
-		return
-	}
+	// 4. Close the main writer connection pool.
 	if err := sqlDB.Close(); err != nil {
 		log.Errorf("failed to close writer database: %v", err)
 	} else {
@@ -278,14 +308,25 @@ func Setup(c *config.Config) error {
 	}
 	sqlDB.SetMaxOpenConns(1)
 
-	// For SQLite on-disk databases, set up read-write splitting via DBResolver.
-	// In-memory databases (used in tests) must NOT use DBResolver because each
-	// connection creates an independent :memory: database, causing the goose
+	// For SQLite on-disk databases, checkpoint any leftover WAL from a previous
+	// run and set up read-write splitting. If the process was killed with
+	// SIGKILL, CloseDB() never ran and the WAL file may contain unflushed data.
+	// The checkpoint runs before opening the reader connection so no other
+	// readers exist that could block TRUNCATE.
+	// In-memory databases (used in tests) must NOT create a reader because each
+	// connection creates an independent :memory: database, causing goose
 	// migration tables to be invisible to subsequent queries.
-	if conf.DBName != "mysql" && !strings.HasPrefix(conf.DBPath, ":memory:") {
+	if isOnDiskSQLite() {
+		// Startup WAL checkpoint
+		if _, err := sqlDB.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+			log.Warnf("Startup WAL checkpoint failed (non-fatal): %v", err)
+		} else {
+			log.Info("Startup WAL checkpoint completed")
+		}
+
 		// Open a separate reader connection for read-write splitting.
-		// This avoids the dbresolver plugin which creates internal *sql.DB pools
-		// that we cannot close — preventing WAL checkpoint on shutdown.
+		// This avoids any hidden connection pool plugins — the reader is a
+		// plain gorm.DB with its own *sql.DB pool.
 		readDSN := getDBConnectionString(conf)
 		readerDB, err = gorm.Open(sqlite.Open(readDSN), &gorm.Config{
 			Logger: logger.Default.LogMode(logger.Silent),
@@ -299,8 +340,12 @@ func Setup(c *config.Config) error {
 			log.Errorf("failed to get reader sql.DB: %v", err)
 			return err
 		}
-		rSqlDB.SetMaxOpenConns(1)
-		log.Info("SQLite read-write splitting enabled (separate reader connection)")
+		maxConns := conf.DBReaderMaxConns
+		if maxConns <= 0 {
+			maxConns = defaultReaderMaxConns
+		}
+		rSqlDB.SetMaxOpenConns(maxConns)
+		log.Infof("SQLite read-write splitting enabled (reader max_conns=%d)", maxConns)
 	}
 
 	// Migrate up to the latest version

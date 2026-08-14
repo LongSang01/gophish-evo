@@ -95,11 +95,16 @@ func (as *AdminServer) Start() {
 			log.Fatal(err)
 		}
 		log.Infof("Starting admin server at https://%s", as.config.ListenURL)
-		log.Fatal(as.server.ListenAndServeTLS(as.config.CertPath, as.config.KeyPath))
+		if err := as.server.ListenAndServeTLS(as.config.CertPath, as.config.KeyPath); err != nil && err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+		return
 	}
 	// If TLS isn't configured, just listen on HTTP
 	log.Infof("Starting admin server at http://%s", as.config.ListenURL)
-	log.Fatal(as.server.ListenAndServe())
+	if err := as.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
 }
 
 // Shutdown attempts to gracefully shutdown the server.

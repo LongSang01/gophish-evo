@@ -26,12 +26,12 @@ func GetWebhooks(pp PageParams) ([]Webhook, int64, error) {
 	whs := []Webhook{}
 	var total int64
 	if pp.Valid() {
-		if err := db.Table("webhooks").Count(&total).Error; err != nil {
+		if err := readDB().Table("webhooks").Count(&total).Error; err != nil {
 			log.Error(err)
 			return whs, 0, err
 		}
 	}
-	query := db.Order("id DESC")
+	query := readDB().Order("id DESC")
 	if pp.Valid() {
 		query = query.Limit(pp.PageSize).Offset(pp.Offset())
 	}
@@ -49,7 +49,7 @@ func GetWebhooks(pp PageParams) ([]Webhook, int64, error) {
 // GetActiveWebhooks returns the active webhooks
 func GetActiveWebhooks() ([]Webhook, error) {
 	whs := []Webhook{}
-	err := db.Where("is_active=?", true).Find(&whs).Error
+	err := readDB().Where("is_active=?", true).Find(&whs).Error
 	return whs, err
 }
 
@@ -57,7 +57,7 @@ func GetActiveWebhooks() ([]Webhook, error) {
 // If no webhook is found, an error is returned.
 func GetWebhook(id int64) (Webhook, error) {
 	wh := Webhook{}
-	err := db.Where("id=?", id).First(&wh).Error
+	err := readDB().Where("id=?", id).First(&wh).Error
 	return wh, err
 }
 

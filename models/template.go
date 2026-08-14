@@ -57,12 +57,12 @@ func GetTemplates(uid int64, pp PageParams) ([]Template, int64, error) {
 	ts := []Template{}
 	var total int64
 	if pp.Valid() {
-		if err := db.Table("templates").Where("user_id=?", uid).Count(&total).Error; err != nil {
+		if err := readDB().Table("templates").Where("user_id=?", uid).Count(&total).Error; err != nil {
 			log.Error(err)
 			return ts, 0, err
 		}
 	}
-	query := db.Where("user_id=?", uid).Order("modified_date DESC")
+	query := readDB().Where("user_id=?", uid).Order("modified_date DESC")
 	if pp.Valid() {
 		query = query.Limit(pp.PageSize).Offset(pp.Offset())
 	}
@@ -73,7 +73,7 @@ func GetTemplates(uid int64, pp PageParams) ([]Template, int64, error) {
 	}
 	for i := range ts {
 		// Get Attachments (exclude content column for performance - content is only needed when editing a single template)
-		err = db.Select("id, template_id, type, name").Where("template_id=?", ts[i].Id).Find(&ts[i].Attachments).Error
+		err = readDB().Select("id, template_id, type, name").Where("template_id=?", ts[i].Id).Find(&ts[i].Attachments).Error
 		if err == nil && len(ts[i].Attachments) == 0 {
 			ts[i].Attachments = make([]Attachment, 0)
 		}
@@ -91,14 +91,14 @@ func GetTemplates(uid int64, pp PageParams) ([]Template, int64, error) {
 // GetTemplate returns the template, if it exists, specified by the given id and user_id.
 func GetTemplate(id int64, uid int64) (Template, error) {
 	t := Template{}
-	err := db.Where("user_id=? and id=?", uid, id).First(&t).Error
+	err := readDB().Where("user_id=? and id=?", uid, id).First(&t).Error
 	if err != nil {
 		log.Error(err)
 		return t, err
 	}
 
 	// Get Attachments
-	err = db.Where("template_id=?", t.Id).Find(&t.Attachments).Error
+	err = readDB().Where("template_id=?", t.Id).Find(&t.Attachments).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		log.Error(err)
 		return t, err
@@ -112,14 +112,14 @@ func GetTemplate(id int64, uid int64) (Template, error) {
 // GetTemplateByName returns the template, if it exists, specified by the given name and user_id.
 func GetTemplateByName(n string, uid int64) (Template, error) {
 	t := Template{}
-	err := db.Where("user_id=? and name=?", uid, n).First(&t).Error
+	err := readDB().Where("user_id=? and name=?", uid, n).First(&t).Error
 	if err != nil {
 		log.Error(err)
 		return t, err
 	}
 
 	// Get Attachments
-	err = db.Where("template_id=?", t.Id).Find(&t.Attachments).Error
+	err = readDB().Where("template_id=?", t.Id).Find(&t.Attachments).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		log.Error(err)
 		return t, err

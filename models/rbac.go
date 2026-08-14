@@ -69,7 +69,7 @@ type Permission struct {
 // GetRoleBySlug returns a role that can be assigned to a user.
 func GetRoleBySlug(slug string) (Role, error) {
 	role := Role{}
-	err := db.Where("slug=?", slug).First(&role).Error
+	err := readDB().Where("slug=?", slug).First(&role).Error
 	return role, err
 }
 
@@ -77,7 +77,7 @@ func GetRoleBySlug(slug string) (Role, error) {
 // permission.
 func (u *User) HasPermission(slug string) (bool, error) {
 	role := Role{}
-	err := db.Preload("Permissions", func(tx *gorm.DB) *gorm.DB {
+	err := readDB().Preload("Permissions", func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("slug = ?", slug)
 	}).First(&role, u.RoleID).Error
 	if err != nil {

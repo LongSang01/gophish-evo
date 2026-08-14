@@ -97,12 +97,12 @@ func GetGroups(uid int64, pp PageParams) ([]Group, int64, error) {
 	gs := []Group{}
 	var total int64
 	if pp.Valid() {
-		if err := db.Table("groups").Where("user_id=?", uid).Count(&total).Error; err != nil {
+		if err := readDB().Table("groups").Where("user_id=?", uid).Count(&total).Error; err != nil {
 			log.Error(err)
 			return gs, 0, err
 		}
 	}
-	query := db.Where("user_id=?", uid).Order("modified_date DESC")
+	query := readDB().Where("user_id=?", uid).Order("modified_date DESC")
 	if pp.Valid() {
 		query = query.Limit(pp.PageSize).Offset(pp.Offset())
 	}
@@ -127,14 +127,14 @@ func GetGroups(uid int64, pp PageParams) ([]Group, int64, error) {
 // created by the given uid.
 func GetGroupSummaries(uid int64) (GroupSummaries, error) {
 	gs := GroupSummaries{}
-	query := db.Table("groups").Where("user_id=?", uid)
+	query := readDB().Table("groups").Where("user_id=?", uid)
 	err := query.Select("id, name, modified_date").Scan(&gs.Groups).Error
 	if err != nil {
 		log.Error(err)
 		return gs, err
 	}
 	for i := range gs.Groups {
-		query = db.Table("group_targets").Where("group_id=?", gs.Groups[i].Id)
+		query = readDB().Table("group_targets").Where("group_id=?", gs.Groups[i].Id)
 		err = query.Count(&gs.Groups[i].NumTargets).Error
 		if err != nil {
 			return gs, err
@@ -147,7 +147,7 @@ func GetGroupSummaries(uid int64) (GroupSummaries, error) {
 // GetGroup returns the group, if it exists, specified by the given id and user_id.
 func GetGroup(id int64, uid int64) (Group, error) {
 	g := Group{}
-	err := db.Where("user_id=? and id=?", uid, id).First(&g).Error
+	err := readDB().Where("user_id=? and id=?", uid, id).First(&g).Error
 	if err != nil {
 		log.Error(err)
 		return g, err
@@ -162,13 +162,13 @@ func GetGroup(id int64, uid int64) (Group, error) {
 // GetGroupSummary returns the summary for the requested group
 func GetGroupSummary(id int64, uid int64) (GroupSummary, error) {
 	g := GroupSummary{}
-	query := db.Table("groups").Where("user_id=? and id=?", uid, id)
+	query := readDB().Table("groups").Where("user_id=? and id=?", uid, id)
 	err := query.Select("id, name, modified_date").Scan(&g).Error
 	if err != nil {
 		log.Error(err)
 		return g, err
 	}
-	query = db.Table("group_targets").Where("group_id=?", id)
+	query = readDB().Table("group_targets").Where("group_id=?", id)
 	err = query.Count(&g.NumTargets).Error
 	if err != nil {
 		return g, err
@@ -179,7 +179,7 @@ func GetGroupSummary(id int64, uid int64) (GroupSummary, error) {
 // GetGroupByName returns the group, if it exists, specified by the given name and user_id.
 func GetGroupByName(n string, uid int64) (Group, error) {
 	g := Group{}
-	err := db.Where("user_id=? and name=?", uid, n).First(&g).Error
+	err := readDB().Where("user_id=? and name=?", uid, n).First(&g).Error
 	if err != nil {
 		log.Error(err)
 		return g, err
@@ -547,6 +547,6 @@ func UpdateTarget(tx *gorm.DB, target Target) error {
 // GetTargets performs a many-to-many select to get all the Targets for a Group
 func GetTargets(gid int64) ([]Target, error) {
 	ts := []Target{}
-	err := db.Table("targets").Select("targets.id, targets.email, targets.full_name, targets.position").Joins("left join group_targets gt ON targets.id = gt.target_id").Where("gt.group_id=?", gid).Scan(&ts).Error
+	err := readDB().Table("targets").Select("targets.id, targets.email, targets.full_name, targets.position").Joins("left join group_targets gt ON targets.id = gt.target_id").Where("gt.group_id=?", gid).Scan(&ts).Error
 	return ts, err
 }

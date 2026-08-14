@@ -31,7 +31,7 @@ func (CampaignSMTP) TableName() string {
 // ordered by Position.
 func GetCampaignSMTPs(campaignId int64) ([]CampaignSMTP, error) {
 	csmtps := []CampaignSMTP{}
-	err := db.Where("campaign_id = ?", campaignId).Order("position ASC").Find(&csmtps).Error
+	err := readDB().Where("campaign_id = ?", campaignId).Order("position ASC").Find(&csmtps).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		log.Error(err)
 		return csmtps, err
@@ -73,14 +73,14 @@ func GetCampaignSMTPRecords(campaignId int64, uid int64) ([]SMTP, error) {
 	smtps := make([]SMTP, 0, len(csmtps))
 	for _, cs := range csmtps {
 		s := SMTP{}
-		err := db.Where("id=? AND user_id=?", cs.SMTPId, uid).First(&s).Error
+		err := readDB().Where("id=? AND user_id=?", cs.SMTPId, uid).First(&s).Error
 		if err != nil {
 			if err == gorm.ErrRecordNotFound {
 				continue
 			}
 			return smtps, err
 		}
-		err = db.Where("smtp_id=?", s.Id).Find(&s.Headers).Error
+		err = readDB().Where("smtp_id=?", s.Id).Find(&s.Headers).Error
 		if err != nil && err != gorm.ErrRecordNotFound {
 			return smtps, err
 		}

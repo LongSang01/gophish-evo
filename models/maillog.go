@@ -202,9 +202,9 @@ func (m *MailLog) getAssignedSMTP(c *Campaign, r Result) (SMTP, error) {
 		}
 		// SMTPId set but not found in cached SMTPs — fetch directly
 		s := SMTP{}
-		dbErr := db.Where("id=? AND user_id=?", r.SMTPId, c.UserId).Find(&s).Error
+		dbErr := readDB().Where("id=? AND user_id=?", r.SMTPId, c.UserId).Find(&s).Error
 		if dbErr == nil {
-			db.Where("smtp_id=?", s.Id).Find(&s.Headers)
+			readDB().Where("smtp_id=?", s.Id).Find(&s.Headers)
 			return s, nil
 		}
 	}
@@ -359,7 +359,7 @@ func (m *MailLog) Generate(msg *gomail.Message) error {
 // GetQueuedMailLogs returns the mail logs that are queued up for the given minute.
 func GetQueuedMailLogs(t time.Time) ([]*MailLog, error) {
 	ms := []*MailLog{}
-	err := db.Where("send_date <= ? AND processing = ?", t, false).
+	err := readDB().Where("send_date <= ? AND processing = ?", t, false).
 		Find(&ms).Error
 	if err != nil {
 		log.Warn(err)
@@ -370,7 +370,7 @@ func GetQueuedMailLogs(t time.Time) ([]*MailLog, error) {
 // GetMailLogsByCampaign returns all of the mail logs for a given campaign.
 func GetMailLogsByCampaign(cid int64) ([]*MailLog, error) {
 	ms := []*MailLog{}
-	err := db.Where("campaign_id = ?", cid).Find(&ms).Error
+	err := readDB().Where("campaign_id = ?", cid).Find(&ms).Error
 	return ms, err
 }
 
@@ -383,7 +383,7 @@ func GetResultSMTPIdMap(campaignId int64) (map[string]int64, error) {
 		SMTPId int64
 	}
 	var rows []ridSMTP
-	err := db.Table("results").Where("campaign_id = ?", campaignId).
+	err := readDB().Table("results").Where("campaign_id = ?", campaignId).
 		Select("r_id, smtp_id").Scan(&rows).Error
 	if err != nil {
 		return nil, err
