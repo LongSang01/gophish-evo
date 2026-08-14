@@ -43,6 +43,12 @@ func isOnDiskSQLite() bool {
 	return conf != nil && conf.DBName != "mysql" && !strings.HasPrefix(conf.DBPath, ":memory:")
 }
 
+// IsMySQL reports whether the configured database backend is MySQL.
+// This is used by the click counter to choose the correct upsert syntax.
+func IsMySQL() bool {
+	return conf != nil && conf.DBName == "mysql"
+}
+
 // readDB returns the connection used for read-only queries. Falls back to
 // the writer connection when no dedicated reader is configured (e.g. MySQL,
 // in-memory test databases), so callers don't need to know which mode is

@@ -143,7 +143,7 @@ func (ps *PhishingServer) ReportExtHandler(w http.ResponseWriter, r *http.Reques
 // (campaign_id, vid). The counter is periodically flushed to the
 // page_click_stats table by a background goroutine. On POST, the vid from
 // the cookie is stored alongside the submitted data in reports_ext.
-func (ps *PhishingServer) renderFixedPage(w http.ResponseWriter, r *http.Request, c *models.Campaign) {
+func (ps *PhishingServer) renderFixedPage(w http.ResponseWriter, r *http.Request, c *models.Campaign, urlPath string) {
 	// Reject requests for completed campaigns – mirrors the email flow where
 	// setupContext returns ErrCampaignComplete for finished campaigns.
 	if c.Status == models.CampaignComplete {
@@ -157,7 +157,7 @@ func (ps *PhishingServer) renderFixedPage(w http.ResponseWriter, r *http.Request
 	}
 
 	// --- Visitor ID cookie management (read or set) ---
-	vid := readOrCreateVisitorID(w, r, c.Id)
+	vid := readOrCreateVisitorID(w, r, urlPath)
 
 	if r.Method == http.MethodGet {
 		// Record a page open in the in-memory counter.
@@ -212,7 +212,7 @@ const visitorIDCookieName = "_vid"
 // readOrCreateVisitorID reads the visitor ID from the request cookie, or
 // generates a new one and sets it on the response. The cookie is scoped to
 // the campaign path with HttpOnly and SameSite=Lax for security.
-func readOrCreateVisitorID(w http.ResponseWriter, r *http.Request, campaignID int64) string {
+func readOrCreateVisitorID(w http.ResponseWriter, r *http.Request, urlPath string) string {
 	// Try to read existing cookie.
 	if cookie, err := r.Cookie(visitorIDCookieName); err == nil && cookie.Value != "" {
 		return cookie.Value
@@ -225,11 +225,11 @@ func readOrCreateVisitorID(w http.ResponseWriter, r *http.Request, campaignID in
 		return ""
 	}
 
-	// Set cookie: HttpOnly, SameSite=Lax, Path=/, 1 year expiry.
+	// Set cookie: HttpOnly, SameSite=Lax, scoped to the campaign path, 1 year expiry.
 	cookie := &http.Cookie{
 		Name:     visitorIDCookieName,
 		Value:    vid,
-		Path:     "/",
+		Path:     urlPath,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   365 * 24 * 60 * 60, // 1 year

@@ -87,7 +87,11 @@ func WithContactAddress(addr string) PhishingServerOption {
 func (ps *PhishingServer) Start() {
 	// Start the click counter flush loop (every 30 seconds).
 	ps.stopFlush = make(chan struct{})
-	go models.ClickCounter.StartFlushLoop(30*time.Second, ps.stopFlush)
+	if models.IsMySQL() {
+		go models.ClickCounter.StartFlushLoopMySQL(30*time.Second, ps.stopFlush)
+	} else {
+		go models.ClickCounter.StartFlushLoop(30*time.Second, ps.stopFlush)
+	}
 
 	if ps.config.UseTLS {
 		// Only support TLS 1.2 and above - ref #1691, #1689
@@ -117,8 +121,14 @@ func (ps *PhishingServer) Shutdown() error {
 	if ps.stopFlush != nil {
 		close(ps.stopFlush)
 	}
-	if err := models.ClickCounter.FlushToDB(); err != nil {
-		log.Errorf("Click counter final flush error: %v", err)
+	if models.IsMySQL() {
+		if err := models.ClickCounter.FlushToDBMySQL(); err != nil {
+			log.Errorf("Click counter final flush error: %v", err)
+		}
+	} else {
+		if err := models.ClickCounter.FlushToDB(); err != nil {
+			log.Errorf("Click counter final flush error: %v", err)
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -229,7 +239,7 @@ func (ps *PhishingServer) PhishHandler(w http.ResponseWriter, r *http.Request) {
 	// submission) are handled here, mirroring the email landing page flow.
 	if r.URL.Query().Get("rid") == "" && (r.Method == http.MethodGet || r.Method == http.MethodPost) {
 		if c, err := models.GetPageCampaignByPath(r.URL.Path); err == nil {
-			ps.renderFixedPage(w, r, c)
+			ps.renderFixedPage(w, r, c, r.URL.Path)
 			return
 		}
 	}
