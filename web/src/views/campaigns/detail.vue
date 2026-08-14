@@ -91,7 +91,10 @@
             <a-descriptions-item label="创建时间">
               {{ formatDate(campaign.created_date) }}
             </a-descriptions-item>
-            <a-descriptions-item label="启动时间">
+            <a-descriptions-item
+              v-if="campaign.source_type === 'email'"
+              label="启动时间"
+            >
               {{ formatDate(campaign.launch_date) }}
             </a-descriptions-item>
             <template v-if="campaign.source_type === 'email'">
@@ -157,9 +160,21 @@
               </a-descriptions-item>
             </template>
             <template v-else>
-              <a-descriptions-item label="上报数量">
+              <a-descriptions-item label="打开数">
                 <a-statistic
-                  :value="reportsTotal"
+                  :value="campaign.stats?.opened || 0"
+                  :value-style="{ fontSize: '16px' }"
+                />
+              </a-descriptions-item>
+              <a-descriptions-item label="点击数">
+                <a-statistic
+                  :value="campaign.stats?.clicked || 0"
+                  :value-style="{ fontSize: '16px' }"
+                />
+              </a-descriptions-item>
+              <a-descriptions-item label="提交数">
+                <a-statistic
+                  :value="campaign.stats?.submitted_data || 0"
                   :value-style="{ fontSize: '16px' }"
                 />
               </a-descriptions-item>
@@ -631,7 +646,8 @@ function buildReportColumns() {
     width: 180,
     customRender: ({ record }: any) => {
       // Summary rows use last_seen_at; regular reports use created_at.
-      const ts = record.created_at || record.last_seen_at || record.last_click_at;
+      const ts =
+        record.created_at || record.last_seen_at || record.last_click_at;
       return ts ? formatDate(ts) : "—";
     },
   });

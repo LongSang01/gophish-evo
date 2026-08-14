@@ -378,6 +378,12 @@ func getCampaignStats(cid int64) (CampaignStats, error) {
 	// SubmittedData count from results is always zero for these types).
 	if s.ReportCount > 0 && s.SubmittedData == 0 {
 		s.SubmittedData = s.ReportCount
+		// page_click_stats unique index (campaign_id, vid) = total unique visitors.
+		var totalVisitors int64
+		if err = db.Table("page_click_stats").Where("campaign_id = ?", cid).Count(&totalVisitors).Error; err != nil {
+			return s, err
+		}
+		s.OpenedEmail = totalVisitors
 	}
 
 	// For page-type campaigns, add page click stats to ClickedLink.
@@ -522,6 +528,14 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 	}
 	if s.ReportCount > 0 && s.SubmittedData == 0 {
 		s.SubmittedData = s.ReportCount
+		// page_click_stats unique index (campaign_id, vid) = total unique visitors.
+		var totalVisitors int64
+		if err = db.Table("page_click_stats").
+			Where("campaign_id IN (SELECT id FROM campaigns WHERE user_id = ?)", uid).
+			Count(&totalVisitors).Error; err != nil {
+			return resp, err
+		}
+		s.OpenedEmail = totalVisitors
 	}
 
 	// Add page click stats to ClickedLink for page-type campaigns.
@@ -593,6 +607,12 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 		}
 		if entry.ReportCount > 0 && entry.SubmittedData == 0 {
 			entry.SubmittedData = entry.ReportCount
+			// page_click_stats unique index (campaign_id, vid) = total unique visitors.
+			var totalVisitors int64
+			if err = db.Table("page_click_stats").Where("campaign_id = ?", r_.Id).Count(&totalVisitors).Error; err != nil {
+				return resp, err
+			}
+			entry.OpenedEmail = totalVisitors
 		}
 		// Add page click stats for this campaign.
 		var campaignPageClicks int64
