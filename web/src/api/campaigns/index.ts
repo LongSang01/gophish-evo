@@ -68,6 +68,13 @@ export function getCampaignReports(
   return defHttp.get({ url: `${Api.Campaigns}/${id}/reports`, params });
 }
 
+export function getCampaignReportSummary(
+  id: number,
+  params?: { pageNum?: number; pageSize?: number },
+): Promise<any> {
+  return defHttp.get({ url: `${Api.Campaigns}/${id}/reports/summary`, params });
+}
+
 export function exportCampaignReports(id: number): Promise<void> {
   return defHttp.get({
     url: `${Api.Campaigns}/${id}/reports/export`,

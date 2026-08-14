@@ -91,6 +91,7 @@ func (as *Server) registerRoutes() {
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/client/code", as.ClientCode)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/page/url", as.PageURL)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/reports", as.CampaignReports)
+	protected.HandleFunc("/campaigns/{id:[0-9]+}/reports/summary", as.CampaignReportSummary)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/reports/export", as.CampaignReportsExport)
 	protected.HandleFunc("/groups/", as.Groups)
 	protected.HandleFunc("/groups/summary", as.GroupsSummary)

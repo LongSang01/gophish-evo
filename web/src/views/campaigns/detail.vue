@@ -482,6 +482,7 @@ import {
   getClientCode,
   getPageURL,
   getCampaignReports,
+  getCampaignReportSummary,
   exportCampaignReports,
 } from "@/api/campaigns";
 import QRCode from "qrcode";
@@ -593,29 +594,59 @@ function handleTableChange(pag: any) {
 }
 
 function buildReportColumns() {
-  reportColumns.value = [
+  const cols: any[] = [
     { title: "来源", dataIndex: "source", key: "source", width: 90 },
     { title: "IP", dataIndex: "ip", key: "ip", width: 150, ellipsis: true },
-    {
-      title: "数据预览",
-      dataIndex: "data",
-      key: "data_preview",
-      width: 450,
-      ellipsis: true,
-    },
-    {
-      title: "时间",
-      dataIndex: "created_at",
-      key: "created_at",
-      width: 180,
-    },
   ];
+
+  // Page-type campaigns show click count and submission status in summary mode.
+  if (campaign.value.source_type === "page") {
+    cols.push({
+      title: "提交次数",
+      dataIndex: "submission_count",
+      key: "submission_count",
+      width: 100,
+      customRender: ({ record }: any) =>
+        record.submitted ? record.submission_count : 0,
+    });
+    cols.push({
+      title: "点击次数",
+      dataIndex: "click_count",
+      key: "click_count",
+      width: 100,
+    });
+  }
+
+  cols.push({
+    title: "数据预览",
+    dataIndex: "data",
+    key: "data_preview",
+    width: campaign.value.source_type === "page" ? 300 : 450,
+    ellipsis: true,
+  });
+  cols.push({
+    title: "时间",
+    dataIndex: "created_at",
+    key: "created_at",
+    width: 180,
+    customRender: ({ record }: any) => {
+      // Summary rows use last_seen_at; regular reports use created_at.
+      const ts = record.created_at || record.last_seen_at || record.last_click_at;
+      return ts ? formatDate(ts) : "—";
+    },
+  });
+
+  reportColumns.value = cols;
 }
 
 async function loadReports(id: number) {
   loadingReports.value = true;
   try {
-    const data = await getCampaignReports(id, {
+    // For page-type campaigns, use the summary API that merges click stats
+    // with submitted reports.
+    const isPage = campaign.value.source_type === "page";
+    const apiFn = isPage ? getCampaignReportSummary : getCampaignReports;
+    const data = await apiFn(id, {
       pageNum: reportPagination.current,
       pageSize: reportPagination.pageSize,
     });
@@ -647,6 +678,11 @@ function showReportDetails(record: any) {
   const data = record.data || {};
   for (const [k, v] of Object.entries(data)) {
     rows.push({ key: k, value: String(v ?? "") });
+  }
+  // For summary rows, show click/submission stats as additional info.
+  if (record.submitted !== undefined) {
+    rows.push({ key: "提交次数", value: String(record.submission_count ?? 0) });
+    rows.push({ key: "额外点击次数", value: String(record.click_count ?? 0) });
   }
   reportDetailRows.value = rows;
   reportDrawerVisible.value = true;

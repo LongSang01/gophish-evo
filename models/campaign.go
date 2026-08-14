@@ -379,6 +379,16 @@ func getCampaignStats(cid int64) (CampaignStats, error) {
 	if s.ReportCount > 0 && s.SubmittedData == 0 {
 		s.SubmittedData = s.ReportCount
 	}
+
+	// For page-type campaigns, add page click stats to ClickedLink.
+	// The page_click_stats table records the total number of page opens
+	// per visitor, flushed from memory periodically.
+	var pageClicks int64
+	if err = db.Table("page_click_stats").Where("campaign_id = ?", cid).Select("COALESCE(SUM(click_count), 0)").Scan(&pageClicks).Error; err != nil {
+		return s, err
+	}
+	s.ClickedLink += pageClicks
+
 	return s, err
 }
 
@@ -513,6 +523,17 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 	if s.ReportCount > 0 && s.SubmittedData == 0 {
 		s.SubmittedData = s.ReportCount
 	}
+
+	// Add page click stats to ClickedLink for page-type campaigns.
+	var pageClicks int64
+	if err = db.Table("page_click_stats").
+		Where("campaign_id IN (SELECT id FROM campaigns WHERE user_id = ? AND source_type = ?)", uid, SourceTypePage).
+		Select("COALESCE(SUM(click_count), 0)").
+		Scan(&pageClicks).Error; err != nil {
+		return resp, err
+	}
+	s.ClickedLink += pageClicks
+
 	resp.Stats = s
 
 	// Query 2: Per-campaign timeline data (one row per campaign)
@@ -573,6 +594,13 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 		if entry.ReportCount > 0 && entry.SubmittedData == 0 {
 			entry.SubmittedData = entry.ReportCount
 		}
+		// Add page click stats for this campaign.
+		var campaignPageClicks int64
+		if err = db.Table("page_click_stats").Where("campaign_id = ?", r_.Id).
+			Select("COALESCE(SUM(click_count), 0)").Scan(&campaignPageClicks).Error; err != nil {
+			return resp, err
+		}
+		entry.ClickedLink += campaignPageClicks
 		timeline = append(timeline, entry)
 	}
 	resp.Timeline = timeline

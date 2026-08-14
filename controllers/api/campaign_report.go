@@ -182,3 +182,32 @@ func sanitizeCSVValue(v string) string {
 	}
 	return v
 }
+
+// CampaignReportSummary returns an aggregated view of page campaign reports,
+// merging submitted reports with click statistics. For page-type campaigns,
+// each unique visitor (identified by vid cookie) appears as a single row
+// showing both their submission and click activity.
+func (as *Server) CampaignReportSummary(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		return
+	}
+	vars := mux.Vars(r)
+	id, _ := strconv.ParseInt(vars["id"], 0, 64)
+	c, err := models.GetCampaign(id, ctx.Get(r, "user_id").(int64))
+	if err != nil {
+		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+		return
+	}
+	if c.SourceType != models.SourceTypePage {
+		JSONResponse(w, models.Response{Success: false, Message: "Report summary is only available for page-type campaigns"}, http.StatusBadRequest)
+		return
+	}
+	pp := parsePagination(r)
+	reports, total, err := models.GetCampaignReportSummary(id, pp)
+	if err != nil {
+		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+		return
+	}
+	pagedJSONResponse(w, http.StatusOK, pp, reports, total)
+}

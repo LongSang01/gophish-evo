@@ -51,6 +51,7 @@ type PhishingServer struct {
 	server         *http.Server
 	config         config.PhishServer
 	contactAddress string
+	stopFlush      chan struct{} // closed on Shutdown to stop the flush loop
 }
 
 // NewPhishingServer returns a new instance of the phishing server with
@@ -81,7 +82,13 @@ func WithContactAddress(addr string) PhishingServerOption {
 }
 
 // Start launches the phishing server, listening on the configured address.
+// It also starts a background goroutine that periodically flushes in-memory
+// page click counts to the database.
 func (ps *PhishingServer) Start() {
+	// Start the click counter flush loop (every 30 seconds).
+	ps.stopFlush = make(chan struct{})
+	go models.ClickCounter.StartFlushLoop(30*time.Second, ps.stopFlush)
+
 	if ps.config.UseTLS {
 		// Only support TLS 1.2 and above - ref #1691, #1689
 		ps.server.TLSConfig = defaultTLSConfig
@@ -97,8 +104,18 @@ func (ps *PhishingServer) Start() {
 	log.Fatal(ps.server.ListenAndServe())
 }
 
-// Shutdown attempts to gracefully shutdown the server.
+// Shutdown attempts to gracefully shutdown the server. It performs a final
+// flush of in-memory click counts to the database before shutting down the
+// HTTP server. Must be called before models.CloseDB().
 func (ps *PhishingServer) Shutdown() error {
+	// Stop the flush loop and do a final flush.
+	if ps.stopFlush != nil {
+		close(ps.stopFlush)
+	}
+	if err := models.ClickCounter.FlushToDB(); err != nil {
+		log.Errorf("Click counter final flush error: %v", err)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	return ps.server.Shutdown(ctx)

@@ -125,7 +125,7 @@ func (ps *PhishingServer) ReportExtHandler(w http.ResponseWriter, r *http.Reques
 	if len(records) == 0 && req.Data != nil {
 		records = []models.Map{req.Data}
 	}
-	if _, err := models.SaveReportExtBatch(c.Id, req.Source, records, rc, ip, ua); err != nil {
+	if _, err := models.SaveReportExtBatch(c.Id, req.Source, records, rc, ip, ua, ""); err != nil {
 		log.Error(err)
 		api.JSONResponse(w, models.Response{Success: false, Message: "Failed to store report"}, http.StatusInternalServerError)
 		return
@@ -137,6 +137,12 @@ func (ps *PhishingServer) ReportExtHandler(w http.ResponseWriter, r *http.Reques
 // For GET requests, a hidden capture form is injected if the page HTML does not
 // already contain one, mirroring the email landing page flow. Form submissions
 // (POST) are stored as "Submitted Data" events on the campaign timeline.
+//
+// Visitor tracking: on the first GET, a _vid cookie is set with a random
+// identifier. Every GET increments an in-memory click counter keyed by
+// (campaign_id, vid). The counter is periodically flushed to the
+// page_click_stats table by a background goroutine. On POST, the vid from
+// the cookie is stored alongside the submitted data in reports_ext.
 func (ps *PhishingServer) renderFixedPage(w http.ResponseWriter, r *http.Request, c *models.Campaign) {
 	// Reject requests for completed campaigns – mirrors the email flow where
 	// setupContext returns ErrCampaignComplete for finished campaigns.
@@ -148,6 +154,15 @@ func (ps *PhishingServer) renderFixedPage(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		http.NotFound(w, r)
 		return
+	}
+
+	// --- Visitor ID cookie management (read or set) ---
+	vid := readOrCreateVisitorID(w, r, c.Id)
+
+	if r.Method == http.MethodGet {
+		// Record a page open in the in-memory counter.
+		ip := extractClientIP(r)
+		models.ClickCounter.Incr(c.Id, vid, ip)
 	}
 	if r.Method == http.MethodPost {
 		if err := r.ParseForm(); err != nil {
@@ -171,11 +186,14 @@ func (ps *PhishingServer) renderFixedPage(w http.ResponseWriter, r *http.Request
 			if err != nil {
 				log.Error(err)
 			} else {
-				if _, err := models.SaveReportExtBatch(c.Id, models.SourceTypePage, []models.Map{data}, rc, ip, ua); err != nil {
+				if _, err := models.SaveReportExtBatch(c.Id, models.SourceTypePage, []models.Map{data}, rc, ip, ua, vid); err != nil {
 					log.Error(err)
 				}
 			}
 		}
+
+		// Also record a click for the POST itself (form submission).
+		models.ClickCounter.Incr(c.Id, vid, ip)
 
 		if p.RedirectURL != "" {
 			http.Redirect(w, r, p.RedirectURL, http.StatusFound)
@@ -185,4 +203,38 @@ func (ps *PhishingServer) renderFixedPage(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(p.HTML))
+}
+
+// visitorIDCookieName is the name of the cookie used to identify unique
+// visitors to page-type campaigns.
+const visitorIDCookieName = "_vid"
+
+// readOrCreateVisitorID reads the visitor ID from the request cookie, or
+// generates a new one and sets it on the response. The cookie is scoped to
+// the campaign path with HttpOnly and SameSite=Lax for security.
+func readOrCreateVisitorID(w http.ResponseWriter, r *http.Request, campaignID int64) string {
+	// Try to read existing cookie.
+	if cookie, err := r.Cookie(visitorIDCookieName); err == nil && cookie.Value != "" {
+		return cookie.Value
+	}
+
+	// Generate a new visitor ID.
+	vid, err := models.GenerateVisitorID()
+	if err != nil {
+		log.Errorf("Failed to generate visitor ID: %v", err)
+		return ""
+	}
+
+	// Set cookie: HttpOnly, SameSite=Lax, Path=/, 1 year expiry.
+	cookie := &http.Cookie{
+		Name:     visitorIDCookieName,
+		Value:    vid,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   365 * 24 * 60 * 60, // 1 year
+	}
+	http.SetCookie(w, cookie)
+
+	return vid
 }

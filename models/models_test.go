@@ -49,6 +49,8 @@ func (s *ModelsSuite) TearDownTest(c *check.C) {
 	db.Where("1=1").Delete(Webhook{})
 	db.Where("1=1").Delete(Event{})
 	db.Where("1=1").Delete(EmailRequest{})
+	db.Where("1=1").Delete(ReportExt{})
+	db.Where("1=1").Delete(PageClickStats{})
 
 	// Reset users table to default state.
 	db.Where("id != 1").Delete(User{})
