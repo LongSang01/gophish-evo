@@ -336,78 +336,82 @@ func (c *Campaign) generateSendDate(idx int, totalRecipients int) time.Time {
 }
 
 // getCampaignStats returns a CampaignStats object for the campaign with the
-// given campaign ID. It also backfills numbers as appropriate with a running
-// total, so that the values are aggregated.
+// given campaign ID. Each counter is computed independently from its own
+// source, so no field is derived from or folded into another one:
 //
-// The results-based counters are computed in a single conditional-aggregate
-// query; report/click stats are only queried for client/page campaigns.
+//   - email campaigns: opened / clicked / submitted are counted from the
+//     events table (one distinct recipient per event type), while total /
+//     error / reported come from the results table. Opening an email is
+//     never added into the click count (or vice versa).
+//   - client campaigns: only reports_ext is used (the submitted-data count).
+//   - page campaigns: reports_ext provides the submitted-data count and
+//     page_click_stats provides the unique-visitor count ("opened").
 func getCampaignStats(cid int64, sourceType string) (CampaignStats, error) {
 	s := CampaignStats{}
-	type aggRow struct {
+
+	// Client/page campaigns never write to the results or events tables.
+	if sourceType == SourceTypeClient || sourceType == SourceTypePage {
+		if err := readDB().Table("reports_ext").Where("campaign_id = ?", cid).Count(&s.ReportCount).Error; err != nil {
+			return s, err
+		}
+		s.SubmittedData = s.ReportCount
+		if sourceType == SourceTypePage {
+			// OpenedEmail = unique page visitors (one row per (campaign_id, vid)).
+			var visitors int64
+			if err := readDB().Table("page_click_stats").Where("campaign_id = ?", cid).Count(&visitors).Error; err != nil {
+				return s, err
+			}
+			s.OpenedEmail = visitors
+			s.Total = visitors
+		} else {
+			s.Total = s.ReportCount
+		}
+		return s, nil
+	}
+
+	// Email campaigns: results provide the recipient-level counters.
+	var agg struct {
 		Total    int64
-		Sent     int64
-		Opened   int64
-		Clicked  int64
-		Sub      int64
 		Err      int64
 		Reported int64
 	}
-	var row aggRow
-	err := readDB().Table("results").
+	if err := readDB().Table("results").
 		Select(`
 			COUNT(*)                                                      AS total,
-			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS sent,
-			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS opened,
-			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS clicked,
-			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS sub,
 			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS err,
 			SUM(CASE WHEN reported = 1 THEN 1 ELSE 0 END)                AS reported
-		`, EventSent, EventOpened, EventClicked, EventDataSubmit, Error).
+		`, Error).
 		Where("campaign_id = ?", cid).
-		Scan(&row).Error
-	if err != nil {
+		Scan(&agg).Error; err != nil {
 		return s, err
 	}
-	// Apply running total backfill.
-	s.Total = row.Total
-	s.SubmittedData = row.Sub
-	s.ClickedLink = row.Clicked + row.Sub
-	s.OpenedEmail = row.Opened + row.Clicked + row.Sub
-	s.EmailsSent = row.Sent + row.Opened + row.Clicked + row.Sub
-	s.EmailReported = row.Reported
-	s.Error = row.Err
+	s.Total = agg.Total
+	s.Error = agg.Err
+	s.EmailReported = agg.Reported
 
-	// Report and page-click stats only exist for client/page campaigns.
-	// Email campaigns never write to reports_ext, so skip these queries.
-	if sourceType == SourceTypeClient || sourceType == SourceTypePage {
-		if err = readDB().Table("reports_ext").Where("campaign_id = ?", cid).Count(&s.ReportCount).Error; err != nil {
-			return s, err
-		}
-		// Also populate SubmittedData for client/page campaigns (the
-		// email-specific SubmittedData count from results is always zero for
-		// these types).
-		if s.ReportCount > 0 && s.SubmittedData == 0 {
-			s.SubmittedData = s.ReportCount
-			// page_click_stats unique index (campaign_id, vid) = total unique visitors.
-			var totalVisitors int64
-			if err = readDB().Table("page_click_stats").Where("campaign_id = ?", cid).Count(&totalVisitors).Error; err != nil {
-				return s, err
-			}
-			s.OpenedEmail = totalVisitors
-		}
+	// opened / clicked / submitted are counted independently from the events
+	// table, one distinct recipient per event type.
+	var ev struct {
+		Sent      int64
+		Opened    int64
+		Clicked   int64
+		Submitted int64
 	}
-
-	// For page-type campaigns, add page click stats to ClickedLink.
-	// The page_click_stats table records the total number of page opens
-	// per visitor, flushed from memory periodically.
-	if sourceType == SourceTypePage {
-		var pageClicks int64
-		if err = readDB().Table("page_click_stats").Where("campaign_id = ?", cid).
-			Select("COALESCE(SUM(click_count), 0)").Scan(&pageClicks).Error; err != nil {
-			return s, err
-		}
-		s.ClickedLink += pageClicks
+	if err := readDB().Table("events").
+		Select(`
+			COUNT(DISTINCT CASE WHEN message = ? THEN email END)         AS sent,
+			COUNT(DISTINCT CASE WHEN message = ? THEN email END)         AS opened,
+			COUNT(DISTINCT CASE WHEN message = ? THEN email END)         AS clicked,
+			COUNT(DISTINCT CASE WHEN message = ? THEN email END)         AS submitted
+		`, EventSent, EventOpened, EventClicked, EventDataSubmit).
+		Where("campaign_id = ?", cid).
+		Scan(&ev).Error; err != nil {
+		return s, err
 	}
+	s.EmailsSent = ev.Sent
+	s.OpenedEmail = ev.Opened
+	s.ClickedLink = ev.Clicked
+	s.SubmittedData = ev.Submitted
 
 	return s, nil
 }
@@ -491,128 +495,62 @@ type DashboardStatsResponse struct {
 	Timeline []DashboardTimelineEntry `json:"timeline"`
 }
 
-// GetDashboardStats returns aggregated campaign statistics using a single
-// efficient SQL query, avoiding the N+1 query problem of GetCampaignSummaries.
+// GetDashboardStats returns aggregated campaign statistics. Per-campaign data
+// is computed once per source type (mirroring getCampaignStats) and the
+// aggregate stats are the sum of the per-campaign entries, so the fields stay
+// independent and no field is derived from another.
 func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 	resp := DashboardStatsResponse{}
 
-	// Query 1: Aggregated stats across all campaigns for this user
-	type aggRow struct {
-		Total         int64
-		Sent          int64
-		Opened        int64
-		Clicked       int64
-		SubmittedData int64
-		Reported      int64
-		Error         int64
-	}
-	var row aggRow
-	err := readDB().Table("results").
-		Select(`
-			COUNT(*)                                                      AS total,
-			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS sent,
-			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS opened,
-			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS clicked,
-			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS submitted_data,
-			SUM(CASE WHEN reported = 1 THEN 1 ELSE 0 END)                AS reported,
-			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END)                  AS error
-		`, EventSent, EventOpened, EventClicked, EventDataSubmit, Error).
-		Where("campaign_id IN (SELECT id FROM campaigns WHERE user_id = ?)", uid).
-		Scan(&row).Error
-	if err != nil {
-		return resp, err
-	}
-
-	// Apply running total backfill (same logic as getCampaignStats)
-	s := CampaignStats{
-		Total:         row.Total,
-		SubmittedData: row.SubmittedData,
-		ClickedLink:   row.Clicked + row.SubmittedData,
-		OpenedEmail:   row.Opened + row.Clicked + row.SubmittedData,
-		EmailsSent:    row.Sent + row.Opened + row.Clicked + row.SubmittedData,
-		EmailReported: row.Reported,
-		Error:         row.Error,
-	}
-
-	// Query reports_ext aggregated count
-	if err = readDB().Table("reports_ext").
-		Where("campaign_id IN (SELECT id FROM campaigns WHERE user_id = ?)", uid).
-		Count(&s.ReportCount).Error; err != nil {
-		return resp, err
-	}
-	if s.ReportCount > 0 && s.SubmittedData == 0 {
-		s.SubmittedData = s.ReportCount
-		// page_click_stats unique index (campaign_id, vid) = total unique visitors.
-		var totalVisitors int64
-		if err = readDB().Table("page_click_stats").
-			Where("campaign_id IN (SELECT id FROM campaigns WHERE user_id = ?)", uid).
-			Count(&totalVisitors).Error; err != nil {
-			return resp, err
-		}
-		s.OpenedEmail = totalVisitors
-	}
-
-	// Add page click stats to ClickedLink for page-type campaigns.
-	var pageClicks int64
-	if err = readDB().Table("page_click_stats").
-		Where("campaign_id IN (SELECT id FROM campaigns WHERE user_id = ? AND source_type = ?)", uid, SourceTypePage).
-		Select("COALESCE(SUM(click_count), 0)").
-		Scan(&pageClicks).Error; err != nil {
-		return resp, err
-	}
-	s.ClickedLink += pageClicks
-
-	resp.Stats = s
-
-	// Query 2: Per-campaign timeline data (one row per campaign)
+	// Query 1: Per-campaign metadata + recipient-level counters from results.
 	type timelineRow struct {
-		Id            int64
-		Name          string
-		CreatedDate   time.Time
-		Status        string
-		Total         int64
-		Sent          int64
-		Opened        int64
-		Clicked       int64
-		SubmittedData int64
-		Reported      int64
-		Error         int64
+		Id          int64
+		Name        string
+		CreatedDate time.Time
+		Status      string
+		SourceType  string
+		Total       int64
+		Reported    int64
+		Error       int64
 	}
 	var rows []timelineRow
-	err = readDB().Table("campaigns c").
+	err := readDB().Table("campaigns c").
 		Select(`
-			c.id, c.name, c.created_date, c.status,
+			c.id, c.name, c.created_date, c.status, c.source_type,
 			COUNT(r.id)                                                      AS total,
-			SUM(CASE WHEN r.status = ? THEN 1 ELSE 0 END)                   AS sent,
-			SUM(CASE WHEN r.status = ? THEN 1 ELSE 0 END)                   AS opened,
-			SUM(CASE WHEN r.status = ? THEN 1 ELSE 0 END)                   AS clicked,
-			SUM(CASE WHEN r.status = ? THEN 1 ELSE 0 END)                   AS submitted_data,
 			SUM(CASE WHEN r.reported = 1 THEN 1 ELSE 0 END)                 AS reported,
 			SUM(CASE WHEN r.status = ? THEN 1 ELSE 0 END)                   AS error
-		`, EventSent, EventOpened, EventClicked, EventDataSubmit, Error).
+		`, Error).
 		Joins("LEFT JOIN results r ON r.campaign_id = c.id").
 		Where("c.user_id = ?", uid).
-		Group("c.id, c.name, c.created_date, c.status").
+		Group("c.id, c.name, c.created_date, c.status, c.source_type").
 		Order("c.created_date DESC").
 		Scan(&rows).Error
 	if err != nil {
 		return resp, err
 	}
 
-	// Batch per-campaign report / click stats so the timeline does not issue
-	// N+1 queries on the loop below.
+	// Batch per-campaign stats so the loop below does not issue N+1 queries.
 	type keyedCountRow struct {
 		CampaignId int64
 		Cnt        int64
 	}
+	type eventAggRow struct {
+		CampaignId int64
+		Sent       int64
+		Opened     int64
+		Clicked    int64
+		Submitted  int64
+	}
 	reportCounts := map[int64]int64{}
 	visitorCounts := map[int64]int64{}
-	campaignClicks := map[int64]int64{}
+	eventCounts := map[int64]eventAggRow{}
 	if len(rows) > 0 {
 		ids := make([]int64, 0, len(rows))
 		for _, r_ := range rows {
 			ids = append(ids, r_.Id)
 		}
+
 		var repRows []keyedCountRow
 		if err := readDB().Table("reports_ext").Select("campaign_id, COUNT(*) AS cnt").
 			Where("campaign_id IN ?", ids).Group("campaign_id").Scan(&repRows).Error; err != nil {
@@ -621,6 +559,7 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 		for _, r_ := range repRows {
 			reportCounts[r_.CampaignId] = r_.Cnt
 		}
+
 		var visRows []keyedCountRow
 		if err := readDB().Table("page_click_stats").Select("campaign_id, COUNT(*) AS cnt").
 			Where("campaign_id IN ?", ids).Group("campaign_id").Scan(&visRows).Error; err != nil {
@@ -629,22 +568,30 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 		for _, r_ := range visRows {
 			visitorCounts[r_.CampaignId] = r_.Cnt
 		}
-		type keyedSumRow struct {
-			CampaignId int64
-			Sum        int64
-		}
-		var sumRows []keyedSumRow
-		if err := readDB().Table("page_click_stats").
-			Select("campaign_id, COALESCE(SUM(click_count), 0) AS sum").
-			Where("campaign_id IN ?", ids).Group("campaign_id").Scan(&sumRows).Error; err != nil {
+
+		// Independent per-event-type counts for email campaigns.
+		var evRows []eventAggRow
+		if err := readDB().Table("events").
+			Select(`
+				campaign_id,
+				COUNT(DISTINCT CASE WHEN message = ? THEN email END)        AS sent,
+				COUNT(DISTINCT CASE WHEN message = ? THEN email END)        AS opened,
+				COUNT(DISTINCT CASE WHEN message = ? THEN email END)        AS clicked,
+				COUNT(DISTINCT CASE WHEN message = ? THEN email END)        AS submitted
+			`, EventSent, EventOpened, EventClicked, EventDataSubmit).
+			Where("campaign_id IN ?", ids).
+			Group("campaign_id").
+			Scan(&evRows).Error; err != nil {
 			return resp, err
 		}
-		for _, r_ := range sumRows {
-			campaignClicks[r_.CampaignId] = r_.Sum
+		for _, r_ := range evRows {
+			eventCounts[r_.CampaignId] = r_
 		}
 	}
 
-	// Convert timelineRows to DashboardTimelineEntry with running total backfill
+	// Build the timeline and the aggregated stats as the sum of the
+	// independent per-campaign entries.
+	s := CampaignStats{}
 	timeline := make([]DashboardTimelineEntry, 0, len(rows))
 	for _, r_ := range rows {
 		entry := DashboardTimelineEntry{
@@ -653,23 +600,42 @@ func GetDashboardStats(uid int64) (DashboardStatsResponse, error) {
 			CreatedDate:   r_.CreatedDate,
 			Status:        r_.Status,
 			Total:         r_.Total,
-			SubmittedData: r_.SubmittedData,
-			ClickedLink:   r_.Clicked + r_.SubmittedData,
-			OpenedEmail:   r_.Opened + r_.Clicked + r_.SubmittedData,
-			EmailsSent:    r_.Sent + r_.Opened + r_.Clicked + r_.SubmittedData,
 			EmailReported: r_.Reported,
 			Error:         r_.Error,
 		}
-		entry.ReportCount = reportCounts[r_.Id]
-		if entry.ReportCount > 0 && entry.SubmittedData == 0 {
+		switch r_.SourceType {
+		case SourceTypeClient:
+			// Client campaigns only have submitted data from reports_ext.
+			entry.ReportCount = reportCounts[r_.Id]
 			entry.SubmittedData = entry.ReportCount
-			// page_click_stats unique index (campaign_id, vid) = total unique visitors.
+			entry.Total = entry.ReportCount
+		case SourceTypePage:
+			// Page campaigns: unique visitors are the "opened" count, page
+			// visits are not link clicks so ClickedLink stays zero.
+			entry.ReportCount = reportCounts[r_.Id]
+			entry.SubmittedData = entry.ReportCount
 			entry.OpenedEmail = visitorCounts[r_.Id]
+			entry.Total = entry.OpenedEmail
+		default:
+			// Email campaigns: each field is counted from its own event type.
+			ev := eventCounts[r_.Id]
+			entry.EmailsSent = ev.Sent
+			entry.OpenedEmail = ev.Opened
+			entry.ClickedLink = ev.Clicked
+			entry.SubmittedData = ev.Submitted
 		}
-		// Add page click stats for this campaign.
-		entry.ClickedLink += campaignClicks[r_.Id]
 		timeline = append(timeline, entry)
+
+		s.Total += entry.Total
+		s.EmailsSent += entry.EmailsSent
+		s.OpenedEmail += entry.OpenedEmail
+		s.ClickedLink += entry.ClickedLink
+		s.SubmittedData += entry.SubmittedData
+		s.EmailReported += entry.EmailReported
+		s.ReportCount += entry.ReportCount
+		s.Error += entry.Error
 	}
+	resp.Stats = s
 	resp.Timeline = timeline
 	return resp, nil
 }

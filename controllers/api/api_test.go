@@ -1014,7 +1014,8 @@ func TestDashboardStats(t *testing.T) {
 	if len(resp.Timeline) < 1 {
 		t.Fatal("expected at least one timeline entry")
 	}
-	// Verify running total backfill invariant
+	// Verify opened recipients are a subset of sent recipients (you must be
+	// sent an email before you can open it).
 	if resp.Stats.EmailsSent < resp.Stats.OpenedEmail {
 		t.Fatalf("EmailsSent (%d) should be >= OpenedEmail (%d)", resp.Stats.EmailsSent, resp.Stats.OpenedEmail)
 	}

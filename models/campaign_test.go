@@ -169,24 +169,30 @@ func (s *ModelsSuite) TestDashboardStatsWithCampaigns(c *check.C) {
 	c1 := s.createCampaign(c)
 	_ = s.createCampaign(c) // second campaign for isolation testing
 
-	// Mark some results with different statuses to exercise the aggregation
+	// Mark some results with different statuses to exercise the aggregation.
 	var results []Result
 	err := db.Where("campaign_id = ?", c1.Id).Find(&results).Error
 	c.Assert(err, check.Equals, nil)
 	c.Assert(len(results) > 0, check.Equals, true)
 
-	// Set first result to "Email Sent"
+	// recipient 0: sent only (also reported)
 	err = db.Model(&results[0]).Update("status", EventSent).Error
 	c.Assert(err, check.Equals, nil)
-	// Set second result to "Email Opened"
+	c.Assert(db.Save(&Event{CampaignId: c1.Id, Email: results[0].Email, Message: EventSent, Time: time.Now().UTC()}).Error, check.Equals, nil)
+	// recipient 1: sent + opened
 	if len(results) > 1 {
 		err = db.Model(&results[1]).Update("status", EventOpened).Error
 		c.Assert(err, check.Equals, nil)
+		c.Assert(db.Save(&Event{CampaignId: c1.Id, Email: results[1].Email, Message: EventSent, Time: time.Now().UTC()}).Error, check.Equals, nil)
+		c.Assert(db.Save(&Event{CampaignId: c1.Id, Email: results[1].Email, Message: EventOpened, Time: time.Now().UTC()}).Error, check.Equals, nil)
 	}
-	// Set third result to "Clicked Link"
+	// recipient 2: sent + opened + clicked
 	if len(results) > 2 {
 		err = db.Model(&results[2]).Update("status", EventClicked).Error
 		c.Assert(err, check.Equals, nil)
+		c.Assert(db.Save(&Event{CampaignId: c1.Id, Email: results[2].Email, Message: EventSent, Time: time.Now().UTC()}).Error, check.Equals, nil)
+		c.Assert(db.Save(&Event{CampaignId: c1.Id, Email: results[2].Email, Message: EventOpened, Time: time.Now().UTC()}).Error, check.Equals, nil)
+		c.Assert(db.Save(&Event{CampaignId: c1.Id, Email: results[2].Email, Message: EventClicked, Time: time.Now().UTC()}).Error, check.Equals, nil)
 	}
 	// Mark one as reported
 	if len(results) > 0 {
@@ -201,19 +207,27 @@ func (s *ModelsSuite) TestDashboardStatsWithCampaigns(c *check.C) {
 	// Total should be the sum of results from both campaigns
 	c.Assert(resp.Stats.Total > 0, check.Equals, true)
 
-	// Verify running total backfill: EmailsSent >= OpenedEmail >= ClickedLink >= SubmittedData
-	c.Assert(resp.Stats.EmailsSent >= resp.Stats.OpenedEmail, check.Equals, true)
-	c.Assert(resp.Stats.OpenedEmail >= resp.Stats.ClickedLink, check.Equals, true)
-	c.Assert(resp.Stats.ClickedLink >= resp.Stats.SubmittedData, check.Equals, true)
-
-	// Verify each timeline entry has correct structure
-	for _, entry := range resp.Timeline {
-		c.Assert(entry.Id > 0, check.Equals, true)
-		c.Assert(entry.Name != "", check.Equals, true)
-		c.Assert(entry.EmailsSent >= entry.OpenedEmail, check.Equals, true)
-		c.Assert(entry.OpenedEmail >= entry.ClickedLink, check.Equals, true)
-		c.Assert(entry.ClickedLink >= entry.SubmittedData, check.Equals, true)
+	// Each field is counted independently from its own event type: opened
+	// must NOT be folded into clicked, and clicked must NOT be folded into
+	// submitted.
+	var entry *DashboardTimelineEntry
+	for i := range resp.Timeline {
+		if resp.Timeline[i].Id == c1.Id {
+			entry = &resp.Timeline[i]
+		}
 	}
+	c.Assert(entry, check.NotNil, check.Commentf("expected timeline entry for campaign %d", c1.Id))
+	c.Assert(entry.EmailsSent, check.Equals, int64(3))
+	c.Assert(entry.OpenedEmail, check.Equals, int64(2))
+	c.Assert(entry.ClickedLink, check.Equals, int64(1))
+	c.Assert(entry.SubmittedData, check.Equals, int64(0))
+	c.Assert(entry.EmailReported >= 1, check.Equals, true)
+
+	// Aggregated stats are the sum of the independent per-campaign fields.
+	c.Assert(resp.Stats.EmailsSent >= entry.EmailsSent, check.Equals, true)
+	c.Assert(resp.Stats.OpenedEmail >= entry.OpenedEmail, check.Equals, true)
+	c.Assert(resp.Stats.ClickedLink >= entry.ClickedLink, check.Equals, true)
+	c.Assert(resp.Stats.SubmittedData >= entry.SubmittedData, check.Equals, true)
 }
 
 func (s *ModelsSuite) TestDashboardStatsIsolation(c *check.C) {
