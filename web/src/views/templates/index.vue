@@ -530,20 +530,41 @@ function handleAttachmentUpload(file: File) {
   return false;
 }
 
+// applyTrackerToHtml inserts or removes the {{.Tracker}} pixel in the email
+// HTML according to the useTracker checkbox. It handles templates that lack a
+// </body> tag (common with imported content) by appending the tracker at the
+// end, and removes the tracker regardless of whether it was inserted before
+// </body> or at the end.
+function applyTrackerToHtml(html: string, useTracker: boolean) {
+  const trackerVar = "{{.Tracker}}";
+  const hasTrackerVar =
+    html.includes("{{.Tracker}}") || html.includes("{{.TrackingUrl}}");
+
+  if (useTracker) {
+    if (hasTrackerVar) return html;
+    const idx = html.toLowerCase().lastIndexOf("</body>");
+    if (idx !== -1) {
+      return html.slice(0, idx) + trackerVar + html.slice(idx);
+    }
+    return html + trackerVar;
+  }
+
+  let out = html;
+  const trackerIdx = out.toLowerCase().indexOf("{{.tracker}}");
+  if (trackerIdx !== -1) {
+    const after = out.slice(trackerIdx + trackerVar.length);
+    if (/^<\/body>/i.test(after)) {
+      out = out.slice(0, trackerIdx) + after;
+    }
+  }
+  if (out.endsWith(trackerVar)) out = out.slice(0, -trackerVar.length);
+  return out;
+}
+
 async function handleSave() {
   saving.value = true;
   try {
-    let html = formData.value.html;
-    if (formData.value.useTracker) {
-      if (
-        html.indexOf("{{.Tracker}}") === -1 &&
-        html.indexOf("{{.TrackingUrl}}") === -1
-      ) {
-        html = html.replace("</body>", "{{.Tracker}}</body>");
-      }
-    } else {
-      html = html.replace("{{.Tracker}}</body>", "</body>");
-    }
+    let html = applyTrackerToHtml(formData.value.html, formData.value.useTracker);
     const payload = {
       name: formData.value.name,
       subject: formData.value.subject,
