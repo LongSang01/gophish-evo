@@ -570,12 +570,14 @@ func sortSummaryRows(rows []ReportSummaryRow) {
 
 // GetPageCampaignByPath returns the fixed-page type campaign whose configured
 // URL path matches the given request path. Only page type activities are
-// served at a fixed URL without a rid parameter. The query filters by
-// source_type in the database so we only load the small set of page campaigns
+// served at a fixed URL without a rid parameter. Only campaigns that are
+// InProgress are returned so that a completed campaign cannot shadow an
+// active one reusing the same path. The query filters by source_type and
+// status in the database so we only load the small set of page campaigns
 // rather than scanning all campaigns.
 func GetPageCampaignByPath(path string) (*Campaign, error) {
 	cs := []Campaign{}
-	if err := readDB().Where("source_type=?", SourceTypePage).Find(&cs).Error; err != nil {
+	if err := readDB().Where("source_type=? AND status=?", SourceTypePage, CampaignInProgress).Find(&cs).Error; err != nil {
 		return nil, err
 	}
 	for i := range cs {

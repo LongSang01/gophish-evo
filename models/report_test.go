@@ -574,3 +574,38 @@ func (s *ModelsSuite) TestReportSummaryLegacyRecords(c *check.C) {
 	c.Assert(rows[0].SubmissionCount, check.Equals, int64(1))
 	c.Assert(rows[0].ClickCount, check.Equals, int64(0)) // no click stats for legacy
 }
+
+// ---------------------------------------------------------------------------
+// GetPageCampaignByPath
+// ---------------------------------------------------------------------------
+
+func (s *ModelsSuite) TestGetPageCampaignByPathSkipsCompleted(c *check.C) {
+	// Old campaign occupying the /IT path.
+	old := s.createCampaignDependencies(c)
+	old.Name = "Old campaign"
+	old.SourceType = SourceTypePage
+	old.URL = "http://phishing.example/IT"
+	old.ReportConfig = &ReportConfig{Fields: []ReportField{}, DedupKey: ""}
+	c.Assert(PostCampaign(&old, old.UserId), check.IsNil)
+
+	got, err := GetPageCampaignByPath("/IT")
+	c.Assert(err, check.IsNil)
+	c.Assert(got.Id, check.Equals, old.Id)
+
+	// Mark it complete: its path should no longer resolve.
+	c.Assert(CompleteCampaign(old.Id, old.UserId), check.IsNil)
+	_, err = GetPageCampaignByPath("/IT")
+	c.Assert(err, check.NotNil)
+
+	// A new campaign reusing the /IT path must be found.
+	fresh := s.createCampaignDependencies(c)
+	fresh.Name = "New campaign"
+	fresh.SourceType = SourceTypePage
+	fresh.URL = "http://phishing.example/IT"
+	fresh.ReportConfig = &ReportConfig{Fields: []ReportField{}, DedupKey: ""}
+	c.Assert(PostCampaign(&fresh, fresh.UserId), check.IsNil)
+
+	got, err = GetPageCampaignByPath("/IT")
+	c.Assert(err, check.IsNil)
+	c.Assert(got.Id, check.Equals, fresh.Id)
+}
