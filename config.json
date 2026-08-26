@@ -5,7 +5,12 @@
     "cert_path": "gophish_admin.crt",
     "key_path": "gophish_admin.key",
     "jwt_secret": "",
-    "trusted_origins": []
+    "trusted_origins": [],
+    "rate_limit": {
+      "requests_per_minute": 10,
+      "cleanup_interval_seconds": 60,
+      "expiry_seconds": 600
+    }
   },
   "phish_server": {
     "listen_url": "127.0.0.1:8080",

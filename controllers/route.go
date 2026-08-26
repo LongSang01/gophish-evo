@@ -60,6 +60,23 @@ func WithWorker(w worker.Worker) AdminServerOption {
 	}
 }
 
+// rateLimiterOptions converts the configured rate limit values into options
+// for the PostLimiter. Unset (zero) values are omitted so that the
+// ratelimit package defaults apply.
+func rateLimiterOptions(conf config.RateLimit) []ratelimit.PostLimiterOption {
+	opts := []ratelimit.PostLimiterOption{}
+	if conf.RequestsPerMinute > 0 {
+		opts = append(opts, ratelimit.WithRequestsPerMinute(conf.RequestsPerMinute))
+	}
+	if conf.CleanupInterval > 0 {
+		opts = append(opts, ratelimit.WithCleanupInterval(time.Duration(conf.CleanupInterval)*time.Second))
+	}
+	if conf.ExpirySeconds > 0 {
+		opts = append(opts, ratelimit.WithExpiry(time.Duration(conf.ExpirySeconds)*time.Second))
+	}
+	return opts
+}
+
 // NewAdminServer returns a new instance of the AdminServer with the
 // provided config and options applied.
 func NewAdminServer(config config.AdminServer, options ...AdminServerOption) *AdminServer {
@@ -68,7 +85,7 @@ func NewAdminServer(config config.AdminServer, options ...AdminServerOption) *Ad
 		ReadTimeout: 10 * time.Second,
 		Addr:        config.ListenURL,
 	}
-	defaultLimiter := ratelimit.NewPostLimiter()
+	defaultLimiter := ratelimit.NewPostLimiter(rateLimiterOptions(config.RateLimit)...)
 	as := &AdminServer{
 		worker:  defaultWorker,
 		server:  defaultServer,

@@ -9,13 +9,22 @@ import (
 
 // AdminServer represents the Admin server configuration details
 type AdminServer struct {
-	ListenURL            string   `json:"listen_url"`
-	UseTLS               bool     `json:"use_tls"`
-	CertPath             string   `json:"cert_path"`
-	KeyPath              string   `json:"key_path"`
-	JWTSecret            string   `json:"jwt_secret"`
-	AllowedInternalHosts []string `json:"allowed_internal_hosts"`
-	TrustedOrigins       []string `json:"trusted_origins"`
+	ListenURL            string    `json:"listen_url"`
+	UseTLS               bool      `json:"use_tls"`
+	CertPath             string    `json:"cert_path"`
+	KeyPath              string    `json:"key_path"`
+	JWTSecret            string    `json:"jwt_secret"`
+	AllowedInternalHosts []string  `json:"allowed_internal_hosts"`
+	TrustedOrigins       []string  `json:"trusted_origins"`
+	RateLimit            RateLimit `json:"rate_limit"`
+}
+
+// RateLimit represents the rate limiting configuration for the admin API.
+// Zero values fall back to the defaults defined in the ratelimit package.
+type RateLimit struct {
+	RequestsPerMinute int `json:"requests_per_minute"`
+	CleanupInterval   int `json:"cleanup_interval_seconds"`
+	ExpirySeconds     int `json:"expiry_seconds"`
 }
 
 // PhishServer represents the Phish server configuration details
