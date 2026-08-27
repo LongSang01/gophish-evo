@@ -609,3 +609,30 @@ func (s *ModelsSuite) TestGetPageCampaignByPathSkipsCompleted(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(got.Id, check.Equals, fresh.Id)
 }
+
+func (s *ModelsSuite) TestPostPageCampaignDuplicatePath(c *check.C) {
+	// First page campaign claims the /IT path.
+	first := s.createCampaignDependencies(c)
+	first.Name = "First page campaign"
+	first.SourceType = SourceTypePage
+	first.URL = "http://phishing.example/IT"
+	first.ReportConfig = &ReportConfig{Fields: []ReportField{}, DedupKey: ""}
+	c.Assert(PostCampaign(&first, first.UserId), check.IsNil)
+
+	// A second in-progress campaign cannot claim the same path.
+	second := s.createCampaignDependencies(c)
+	second.Name = "Second page campaign"
+	second.SourceType = SourceTypePage
+	second.URL = "http://phishing.example/IT"
+	second.ReportConfig = &ReportConfig{Fields: []ReportField{}, DedupKey: ""}
+	err := PostCampaign(&second, second.UserId)
+	c.Assert(err, check.Equals, ErrDuplicatePagePath)
+
+	// Completing the first campaign frees the path.
+	c.Assert(CompleteCampaign(first.Id, first.UserId), check.IsNil)
+	c.Assert(PostCampaign(&second, second.UserId), check.IsNil)
+
+	got, err := GetPageCampaignByPath("/IT")
+	c.Assert(err, check.IsNil)
+	c.Assert(got.Id, check.Equals, second.Id)
+}

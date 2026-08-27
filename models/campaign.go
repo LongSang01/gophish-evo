@@ -136,6 +136,10 @@ var ErrSMTPNotFound = errors.New("Sending profile not found")
 // launch date
 var ErrInvalidSendByDate = errors.New("The launch date must be before the \"send emails by\" date")
 
+// ErrDuplicatePagePath indicates that another in-progress fixed page
+// campaign already serves the requested URL path.
+var ErrDuplicatePagePath = errors.New("Another in-progress fixed page campaign is already using this URL path")
+
 // RecipientParameter is the URL parameter that points to the result ID for a recipient.
 const RecipientParameter = "rid"
 
@@ -201,6 +205,14 @@ func GetCampaignForContext(id int64, uid int64) (Campaign, error) {
 		log.Warnf("%s: sending profile not found for campaign", err)
 	}
 	return c, nil
+}
+
+// getCampaignStatus returns just the status of the campaign with the given
+// id, without loading any related records.
+func getCampaignStatus(id int64) (string, error) {
+	c := Campaign{}
+	err := readDB().Table("campaigns").Select("status").Where("id=?", id).First(&c).Error
+	return c.Status, err
 }
 
 // AddEvent creates a new campaign event in the database
@@ -1019,6 +1031,9 @@ func postReportCampaign(c *Campaign, uid int64) error {
 		}
 		c.Page = p
 		c.PageId = p.Id
+		if err := validatePageCampaignPath(c); err != nil {
+			return err
+		}
 	}
 	// Normalize the report configuration.
 	rc := c.ReportConfig
@@ -1043,6 +1058,43 @@ func postReportCampaign(c *Campaign, uid int64) error {
 	}
 	if err := AddEvent(&Event{Message: "Campaign Created"}, c.Id); err != nil {
 		log.Error(err)
+	}
+	return nil
+}
+
+// validatePageCampaignPath ensures that the URL path of a fixed page campaign
+// does not collide with another in-progress page type campaign. It mirrors
+// the matching semantics of GetPageCampaignByPath so that what the phishing
+// server resolves at request time agrees with what creation accepts.
+func validatePageCampaignPath(c *Campaign) error {
+	parsed, err := url.Parse(c.URL)
+	if err != nil {
+		return err
+	}
+	path := parsed.Path
+	if path == "" {
+		path = "/"
+	}
+	cs := []Campaign{}
+	err = readDB().Select("id, url").
+		Where("source_type=? AND status=? AND id<>?", SourceTypePage, CampaignInProgress, c.Id).
+		Find(&cs).Error
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	for i := range cs {
+		u, err := url.Parse(cs[i].URL)
+		if err != nil {
+			continue
+		}
+		p := u.Path
+		if p == "" {
+			p = "/"
+		}
+		if p == path {
+			return ErrDuplicatePagePath
+		}
 	}
 	return nil
 }

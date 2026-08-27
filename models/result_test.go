@@ -117,3 +117,17 @@ func (s *ModelsSuite) TestDuplicateResults(ch *check.C) {
 	ch.Assert(c.Results[0].Email, check.Equals, group.Targets[0].Email)
 	ch.Assert(c.Results[1].Email, check.Equals, group.Targets[2].Email)
 }
+
+func (s *ModelsSuite) TestHandleEmailReportRejectsCompleted(ch *check.C) {
+	campaign := s.createCampaign(ch)
+	result := campaign.Results[0]
+
+	// While the campaign is in progress, reporting succeeds.
+	ch.Assert(result.HandleEmailReport(EventDetails{}), check.Equals, nil)
+
+	// Once completed, further reports must be rejected.
+	ch.Assert(CompleteCampaign(campaign.Id, campaign.UserId), check.Equals, nil)
+	r2, err := GetResult(result.RId)
+	ch.Assert(err, check.IsNil)
+	ch.Assert(r2.HandleEmailReport(EventDetails{}), check.Equals, ErrCampaignCompleted)
+}

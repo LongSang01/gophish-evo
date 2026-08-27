@@ -3,6 +3,7 @@ package models
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"net"
 	"sync"
@@ -163,9 +164,22 @@ func (r *Result) HandleFormSubmit(details EventDetails) error {
 	return db.Save(r).Error
 }
 
+// ErrCampaignCompleted indicates the campaign is already complete and can
+// no longer accept new visitor or report data.
+var ErrCampaignCompleted = errors.New("Campaign already completed")
+
 // HandleEmailReport updates a Result in the case where they report a simulated
-// phishing email using the HTTP handler.
+// phishing email using the HTTP handler. Reports targeting a completed
+// campaign are rejected so that closed campaigns are not modified and their
+// webhooks are not triggered (e.g. by late IMAP polls).
 func (r *Result) HandleEmailReport(details EventDetails) error {
+	status, err := getCampaignStatus(r.CampaignId)
+	if err != nil {
+		return err
+	}
+	if status == CampaignComplete {
+		return ErrCampaignCompleted
+	}
 	event, err := r.createEvent(EventReported, details)
 	if err != nil {
 		return err
