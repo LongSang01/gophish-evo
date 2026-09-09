@@ -141,7 +141,14 @@ func (as *Server) CampaignResultsExport(w http.ResponseWriter, r *http.Request) 
 		// Mirror the original frontend export, which derived the CSV columns from
 		// Object.keys() on the first result record (i.e. the JSON field order).
 		if keys, err := jsonKeys(cr.Results[0]); err == nil && len(keys) > 0 {
-			fixedKeys = keys
+			// Exclude the nested "events" key from CSV — events have their own export endpoint.
+			filtered := keys[:0]
+			for _, k := range keys {
+				if k != "events" {
+					filtered = append(filtered, k)
+				}
+			}
+			fixedKeys = filtered
 		}
 	}
 	rows := make([]util.CSVRow, 0, len(cr.Results))
@@ -219,10 +226,11 @@ func (as *Server) CampaignEventsExport(w http.ResponseWriter, r *http.Request) {
 		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
 		return
 	}
+	events := cr.AllEvents()
 	fixedKeys := []string{"campaign_id", "email", "time", "message", "details"}
-	rows := make([]util.CSVRow, 0, len(cr.Events))
-	for i := range cr.Events {
-		e := &cr.Events[i]
+	rows := make([]util.CSVRow, 0, len(events))
+	for i := range events {
+		e := &events[i]
 		rows = append(rows, util.CSVRow{Fixed: []interface{}{e.CampaignId, e.Email, e.Time, e.Message, e.Details}})
 	}
 	writeCSVFile(w, cr.Name, "events", fixedKeys, rows)

@@ -41,13 +41,13 @@ type Campaign struct {
 
 // CampaignResults is a struct representing the results from a campaign
 type CampaignResults struct {
-	Id      int64    `json:"id"`
-	Name    string   `json:"name"`
-	Status  string   `json:"status"`
-	Total   int64    `json:"total" gorm:"-"`
-	Results []Result `json:"results,omitempty" gorm:"-"`
-	Events  []Event  `json:"timeline,omitempty" gorm:"-"`
-	SMTPs   []SMTP   `json:"smtps,omitempty" gorm:"-"`
+	Id           int64    `json:"id"`
+	Name         string   `json:"name"`
+	Status       string   `json:"status"`
+	Total        int64    `json:"total" gorm:"-"`
+	Results      []Result `json:"results,omitempty" gorm:"-"`
+	OrphanEvents []Event  `json:"-" gorm:"-"` // events without a matching result (e.g. "Campaign Created")
+	SMTPs        []SMTP   `json:"smtps,omitempty" gorm:"-"`
 }
 
 // CampaignSummaries is a struct representing the overview of campaigns
@@ -747,10 +747,25 @@ func GetCampaignResults(id int64, uid int64, pp PageParams) (CampaignResults, er
 		log.Errorf("%s: results not found for campaign", err)
 		return cr, err
 	}
-	err = readDB().Table("events").Where("campaign_id=?", cr.Id).Find(&cr.Events).Error
+	// Load ALL events for this campaign (not paginated — events are lightweight)
+	var events []Event
+	err = readDB().Table("events").Where("campaign_id=?", cr.Id).Find(&events).Error
 	if err != nil {
 		log.Errorf("%s: events not found for campaign", err)
 		return cr, err
+	}
+	// Group events by email and attach to each result
+	eventsByEmail := make(map[string][]Event, len(events))
+	for _, e := range events {
+		eventsByEmail[e.Email] = append(eventsByEmail[e.Email], e)
+	}
+	for i := range cr.Results {
+		cr.Results[i].Events = eventsByEmail[cr.Results[i].Email]
+		delete(eventsByEmail, cr.Results[i].Email)
+	}
+	// Collect orphan events (no matching result, e.g. "Campaign Created")
+	for _, evts := range eventsByEmail {
+		cr.OrphanEvents = append(cr.OrphanEvents, evts...)
 	}
 	// Load the SMTP sending profiles associated with this campaign
 	cr.SMTPs, err = GetCampaignSMTPRecords(cr.Id, uid)
@@ -767,7 +782,19 @@ func GetCampaignResults(id int64, uid int64, pp PageParams) (CampaignResults, er
 			cr.Results[i].SMTPFromAddress = addr
 		}
 	}
-	return cr, err
+	return cr, nil
+}
+
+// AllEvents returns a flat list of all events across all results,
+// including orphan events (e.g. "Campaign Created") that have no matching result.
+// This is used by CSV export which needs a single flat event list.
+func (cr *CampaignResults) AllEvents() []Event {
+	var all []Event
+	for _, r := range cr.Results {
+		all = append(all, r.Events...)
+	}
+	all = append(all, cr.OrphanEvents...)
+	return all
 }
 
 // GetQueuedCampaigns returns the campaigns that are queued up for this given minute

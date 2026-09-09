@@ -64,6 +64,7 @@ type Result struct {
 	Reported        bool      `json:"reported" sql:"not null"`
 	ModifiedDate    time.Time `json:"modified_date"`
 	SMTPFromAddress string    `json:"smtp_from_address,omitempty" gorm:"-"`
+	Events          []Event   `json:"events,omitempty" gorm:"-"`
 	BaseRecipient
 }
 

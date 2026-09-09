@@ -625,10 +625,6 @@ async function loadResults(id: number) {
     });
     results.value = data.results || [];
     pagination.total = data.total || 0;
-    // Merge timeline from results API (may have more events)
-    if (data.timeline?.length) {
-      allTimeline.value = data.timeline;
-    }
   } catch (error) {
     message.error("加载结果失败");
   } finally {
@@ -839,8 +835,13 @@ async function copyPageUrl() {
 
 function showRecipientTimeline(record: any) {
   drawerEmail.value = record.email;
-  drawerEvents.value = allTimeline.value
-    .filter((e: any) => e.email === record.email)
+  // Events are embedded in each result — use them directly.
+  // Fall back to filtering allTimeline (from campaign detail) if needed.
+  const events = record.events?.length
+    ? record.events
+    : allTimeline.value.filter((e: any) => e.email === record.email);
+  drawerEvents.value = events
+    .slice()
     .sort(
       (a: any, b: any) =>
         new Date(a.time).getTime() - new Date(b.time).getTime(),
