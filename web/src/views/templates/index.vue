@@ -392,7 +392,7 @@ async function loadTemplates() {
       pageNum: pagination.current,
       pageSize: pagination.pageSize,
     });
-    templates.value = result.data || [];
+    templates.value = result.items || [];
     pagination.total = result.total || 0;
   } catch (error) {
     message.error("加载模板失败");
@@ -417,7 +417,7 @@ async function loadSMTPProfiles() {
     smtpPage.current = 1;
     smtpPage.noMore = false;
     const result = await getSMTPProfiles({ pageNum: 1, pageSize: smtpPage.pageSize });
-    const items = Array.isArray(result) ? result : result?.data ?? [];
+    const items = Array.isArray(result) ? result : result?.items ?? result?.data ?? [];
     smtpProfiles.value = items;
     smtpPage.total = Array.isArray(result) ? items.length : (result?.total ?? items.length);
     smtpPage.noMore = items.length < smtpPage.pageSize;
@@ -440,7 +440,7 @@ async function loadMoreSmtp() {
   try {
     smtpPage.current++;
     const result = await getSMTPProfiles({ pageNum: smtpPage.current, pageSize: smtpPage.pageSize });
-    const items = Array.isArray(result) ? result : result?.data ?? [];
+    const items = Array.isArray(result) ? result : result?.items ?? result?.data ?? [];
     smtpProfiles.value = [...smtpProfiles.value, ...items];
     smtpPage.noMore = items.length < smtpPage.pageSize;
   } catch {

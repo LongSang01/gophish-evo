@@ -58,6 +58,31 @@ func setKnownPassword(t *testing.T, tc *testContext) {
 	}
 }
 
+// decodeSuccessBody is a test helper that unwraps {"success":true,"data":...} responses.
+func decodeSuccessBody(w *httptest.ResponseRecorder, target interface{}) error {
+	var envelope struct {
+		Success bool            `json:"success"`
+		Data    json.RawMessage `json:"data"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&envelope); err != nil {
+		return err
+	}
+	return json.Unmarshal(envelope.Data, target)
+}
+
+// decodeListBody is a test helper that unwraps {"success":true,"items":[...],"total":N} responses.
+func decodeListBody(w *httptest.ResponseRecorder, target interface{}) (int64, error) {
+	var envelope struct {
+		Success bool            `json:"success"`
+		Items   json.RawMessage `json:"items"`
+		Total   int64           `json:"total"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&envelope); err != nil {
+		return 0, err
+	}
+	return envelope.Total, json.Unmarshal(envelope.Items, target)
+}
+
 func createTestData(t *testing.T) {
 	group := models.Group{Name: "Test Group"}
 	group.Targets = []models.Target{
@@ -185,7 +210,9 @@ func TestGetCurrentUser(t *testing.T) {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
 	u := models.User{}
-	json.NewDecoder(w.Body).Decode(&u)
+	if err := decodeSuccessBody(w, &u); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if u.Id != tc.admin.Id {
 		t.Fatalf("expected user id %d got %d", tc.admin.Id, u.Id)
 	}
@@ -240,7 +267,9 @@ func TestResetPasswordRequired(t *testing.T) {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
 	m := map[string]bool{}
-	json.NewDecoder(w.Body).Decode(&m)
+	if err := decodeSuccessBody(w, &m); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if _, ok := m["password_change_required"]; !ok {
 		t.Fatal("expected password_change_required field in response")
 	}
@@ -290,7 +319,9 @@ func TestCreateCampaign(t *testing.T) {
 		t.Fatalf("expected 201 got %d: %s", w.Code, w.Body.String())
 	}
 	c := models.Campaign{}
-	json.NewDecoder(w.Body).Decode(&c)
+	if err := decodeSuccessBody(w, &c); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if c.Name != "New Campaign" {
 		t.Fatalf("expected name 'New Campaign' got %s", c.Name)
 	}
@@ -416,14 +447,13 @@ func TestGetGroupsPagination(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
-	resp := models.PagedResponse{}
-	json.NewDecoder(w.Body).Decode(&resp)
-	if resp.Total != 5 {
-		t.Fatalf("expected total 5 got %d", resp.Total)
+	var gs []interface{}
+	total, err := decodeListBody(w, &gs)
+	if err != nil {
+		t.Fatalf("error decoding response: %v", err)
 	}
-	gs, ok := resp.Data.([]interface{})
-	if !ok {
-		t.Fatalf("expected data to be an array, got %T", resp.Data)
+	if total != 5 {
+		t.Fatalf("expected total 5 got %d", total)
 	}
 	if len(gs) != 2 {
 		t.Fatalf("expected 2 rows on page 1 got %d", len(gs))
@@ -434,12 +464,13 @@ func TestGetGroupsPagination(t *testing.T) {
 	r = ctx.Set(r, "user_id", int64(1))
 	w = httptest.NewRecorder()
 	tc.apiServer.Groups(w, r)
-	resp = models.PagedResponse{}
-	json.NewDecoder(w.Body).Decode(&resp)
-	if resp.Total != 5 {
-		t.Fatalf("expected total 5 got %d", resp.Total)
+	total, err = decodeListBody(w, &gs)
+	if err != nil {
+		t.Fatalf("error decoding response: %v", err)
 	}
-	gs, _ = resp.Data.([]interface{})
+	if total != 5 {
+		t.Fatalf("expected total 5 got %d", total)
+	}
 	if len(gs) != 1 {
 		t.Fatalf("expected 1 row on page 3 got %d", len(gs))
 	}
@@ -459,7 +490,9 @@ func TestCreateGroup(t *testing.T) {
 		t.Fatalf("expected 201 got %d: %s", w.Code, w.Body.String())
 	}
 	g := models.Group{}
-	json.NewDecoder(w.Body).Decode(&g)
+	if err := decodeSuccessBody(w, &g); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if g.Name != "New Group" {
 		t.Fatalf("expected name 'New Group' got %s", g.Name)
 	}
@@ -520,7 +553,9 @@ func TestModifyGroup(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	g := models.Group{}
-	json.NewDecoder(w.Body).Decode(&g)
+	if err := decodeSuccessBody(w, &g); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if g.Name != "Modified Group" {
 		t.Fatalf("expected name 'Modified Group' got %s", g.Name)
 	}
@@ -561,7 +596,9 @@ func TestCreateTemplate(t *testing.T) {
 		t.Fatalf("expected 201 got %d: %s", w.Code, w.Body.String())
 	}
 	tmpl := models.Template{}
-	json.NewDecoder(w.Body).Decode(&tmpl)
+	if err := decodeSuccessBody(w, &tmpl); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if tmpl.Name != "New Template" {
 		t.Fatalf("expected name 'New Template' got %s", tmpl.Name)
 	}
@@ -619,7 +656,9 @@ func TestModifyTemplate(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	tmpl := models.Template{}
-	json.NewDecoder(w.Body).Decode(&tmpl)
+	if err := decodeSuccessBody(w, &tmpl); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if tmpl.Name != "Modified Template" {
 		t.Fatalf("expected name 'Modified Template' got %s", tmpl.Name)
 	}
@@ -660,7 +699,9 @@ func TestCreatePage(t *testing.T) {
 		t.Fatalf("expected 201 got %d: %s", w.Code, w.Body.String())
 	}
 	p := models.Page{}
-	json.NewDecoder(w.Body).Decode(&p)
+	if err := decodeSuccessBody(w, &p); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if p.Name != "New Page" {
 		t.Fatalf("expected name 'New Page' got %s", p.Name)
 	}
@@ -718,7 +759,9 @@ func TestModifyPage(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	p := models.Page{}
-	json.NewDecoder(w.Body).Decode(&p)
+	if err := decodeSuccessBody(w, &p); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if p.Name != "Modified Page" {
 		t.Fatalf("expected name 'Modified Page' got %s", p.Name)
 	}
@@ -759,7 +802,9 @@ func TestCreateSendingProfile(t *testing.T) {
 		t.Fatalf("expected 201 got %d: %s", w.Code, w.Body.String())
 	}
 	s := models.SMTP{}
-	json.NewDecoder(w.Body).Decode(&s)
+	if err := decodeSuccessBody(w, &s); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if s.Name != "New SMTP" {
 		t.Fatalf("expected name 'New SMTP' got %s", s.Name)
 	}
@@ -816,7 +861,9 @@ func TestModifySendingProfile(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	s := models.SMTP{}
-	json.NewDecoder(w.Body).Decode(&s)
+	if err := decodeSuccessBody(w, &s); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if s.Name != "Modified SMTP" {
 		t.Fatalf("expected name 'Modified SMTP' got %s", s.Name)
 	}
@@ -875,7 +922,9 @@ func TestCreateWebhook(t *testing.T) {
 		t.Fatalf("expected 201 got %d: %s", w.Code, w.Body.String())
 	}
 	wh := models.Webhook{}
-	json.NewDecoder(w.Body).Decode(&wh)
+	if err := decodeSuccessBody(w, &wh); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if wh.Name != "Test Webhook" {
 		t.Fatalf("expected name 'Test Webhook' got %s", wh.Name)
 	}
@@ -936,7 +985,9 @@ func TestModifyWebhook(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	modified := models.Webhook{}
-	json.NewDecoder(w.Body).Decode(&modified)
+	if err := decodeSuccessBody(w, &modified); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if modified.Name != "Modified Webhook" {
 		t.Fatalf("expected name 'Modified Webhook' got %s", modified.Name)
 	}
@@ -1007,7 +1058,9 @@ func TestDashboardStats(t *testing.T) {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
 	resp := models.DashboardStatsResponse{}
-	json.NewDecoder(w.Body).Decode(&resp)
+	if err := decodeSuccessBody(w, &resp); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if resp.Stats.Total < 1 {
 		t.Fatal("expected at least one result in dashboard stats")
 	}
@@ -1047,7 +1100,9 @@ func TestGroupsSummary(t *testing.T) {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
 	gs := models.GroupSummaries{}
-	json.NewDecoder(w.Body).Decode(&gs)
+	if err := decodeSuccessBody(w, &gs); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if gs.Total < 1 {
 		t.Fatal("expected at least one group in summary")
 	}
@@ -1078,7 +1133,9 @@ func TestSiteImportBaseHref(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	cs := cloneResponse{}
-	json.NewDecoder(w.Body).Decode(&cs)
+	if err := decodeSuccessBody(w, &cs); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if cs.HTML == "" {
 		t.Fatal("expected non-empty HTML in response")
 	}
@@ -1098,7 +1155,9 @@ func TestImportEmail(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	er := emailResponse{}
-	json.NewDecoder(w.Body).Decode(&er)
+	if err := decodeSuccessBody(w, &er); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if er.Subject != "Test Email" {
 		t.Fatalf("expected subject 'Test Email' got %s", er.Subject)
 	}
@@ -1118,7 +1177,9 @@ func TestImportEmailConvertLinks(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	er := emailResponse{}
-	json.NewDecoder(w.Body).Decode(&er)
+	if err := decodeSuccessBody(w, &er); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if er.HTML == "" {
 		t.Fatal("expected non-empty HTML in response")
 	}
@@ -1215,7 +1276,9 @@ func TestGetCampaign(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	got := models.Campaign{}
-	json.NewDecoder(w.Body).Decode(&got)
+	if err := decodeSuccessBody(w, &got); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if got.Name != "Get Test" {
 		t.Fatalf("expected name 'Get Test' got %s", got.Name)
 	}
@@ -1294,7 +1357,9 @@ func TestGetCampaignSummary(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	cs := models.CampaignSummary{}
-	json.NewDecoder(w.Body).Decode(&cs)
+	if err := decodeSuccessBody(w, &cs); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if cs.Name != "Summary Detail Test" {
 		t.Fatalf("expected name 'Summary Detail Test' got %s", cs.Name)
 	}
@@ -1328,7 +1393,9 @@ func TestGetSingleGroup(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	g := models.Group{}
-	json.NewDecoder(w.Body).Decode(&g)
+	if err := decodeSuccessBody(w, &g); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if g.Name != "Test Group" {
 		t.Fatalf("expected name 'Test Group' got %s", g.Name)
 	}
@@ -1347,7 +1414,9 @@ func TestGetSingleTemplate(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	tmpl := models.Template{}
-	json.NewDecoder(w.Body).Decode(&tmpl)
+	if err := decodeSuccessBody(w, &tmpl); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if tmpl.Name != "Test Template" {
 		t.Fatalf("expected name 'Test Template' got %s", tmpl.Name)
 	}
@@ -1366,7 +1435,9 @@ func TestGetSinglePage(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	p := models.Page{}
-	json.NewDecoder(w.Body).Decode(&p)
+	if err := decodeSuccessBody(w, &p); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if p.Name != "Test Page" {
 		t.Fatalf("expected name 'Test Page' got %s", p.Name)
 	}
@@ -1385,7 +1456,9 @@ func TestGetSingleSMTP(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	s := models.SMTP{}
-	json.NewDecoder(w.Body).Decode(&s)
+	if err := decodeSuccessBody(w, &s); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if s.Name != "Test SMTP" {
 		t.Fatalf("expected name 'Test SMTP' got %s", s.Name)
 	}
@@ -1455,7 +1528,9 @@ func TestImportGroup(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
 	ts := []models.Target{}
-	json.NewDecoder(w.Body).Decode(&ts)
+	if err := decodeSuccessBody(w, &ts); err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
 	if len(ts) < 2 {
 		t.Fatalf("expected at least 2 targets, got %d", len(ts))
 	}

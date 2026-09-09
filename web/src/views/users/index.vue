@@ -124,7 +124,7 @@ async function loadUsers() {
   loading.value = true;
   try {
     const result = await getUsers({ pageNum: pagination.current, pageSize: pagination.pageSize });
-    users.value = result.data || [];
+    users.value = result.items || [];
     pagination.total = result.total || 0;
   } catch (error) {
     message.error('加载用户列表失败');

@@ -169,7 +169,7 @@ async function loadProfiles() {
   loading.value = true;
   try {
     const result = await getSMTPProfiles({ pageNum: pagination.current, pageSize: pagination.pageSize });
-    profiles.value = result.data || [];
+    profiles.value = result.items || [];
     pagination.total = result.total || 0;
   } catch (error) {
     message.error('加载发送配置失败');

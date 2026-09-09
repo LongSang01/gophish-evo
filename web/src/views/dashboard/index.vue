@@ -148,7 +148,7 @@ async function loadTableData() {
       pageNum: pagination.current,
       pageSize: pagination.pageSize,
     });
-    const data = result.data || result.campaigns || result || [];
+    const data = result.items || result.data || [];
     const total = result.total ?? data.length;
     campaigns.value = Array.isArray(data) ? data : [];
     pagination.total = total;

@@ -45,21 +45,17 @@ func TestGetUsers(t *testing.T) {
 		t.Fatalf("unexpected error code received. expected %d got %d", expected, w.Code)
 	}
 
-	pr := models.PagedResponse{}
-	err := json.NewDecoder(w.Body).Decode(&pr)
+	var got []models.User
+	total, err := decodeListBody(w, &got)
 	if err != nil {
 		t.Fatalf("error decoding users data: %v", err)
 	}
 
 	// We only expect one user
 	expectedUsers := int64(1)
-	if pr.Total != expectedUsers {
-		t.Fatalf("unexpected number of users returned. expected %d got %d", expectedUsers, pr.Total)
+	if total != expectedUsers {
+		t.Fatalf("unexpected number of users returned. expected %d got %d", expectedUsers, total)
 	}
-	// Decode the data array
-	dataBytes, _ := json.Marshal(pr.Data)
-	var got []models.User
-	json.Unmarshal(dataBytes, &got)
 	if len(got) != 1 {
 		t.Fatalf("expected 1 user in data, got %d", len(got))
 	}
@@ -87,13 +83,13 @@ func TestCreateUser(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	testCtx.apiServer.Users(w, r)
-	expected := http.StatusOK
+	expected := http.StatusCreated
 	if w.Code != expected {
 		t.Fatalf("unexpected error code received. expected %d got %d", expected, w.Code)
 	}
 
 	got := &models.User{}
-	err = json.NewDecoder(w.Body).Decode(got)
+	err = decodeSuccessBody(w, got)
 	if err != nil {
 		t.Fatalf("error decoding user payload: %v", err)
 	}
@@ -129,7 +125,7 @@ func TestModifyUser(t *testing.T) {
 
 	testCtx.apiServer.ServeHTTP(w, r)
 	response := &models.User{}
-	err = json.NewDecoder(w.Body).Decode(response)
+	err = decodeSuccessBody(w, response)
 	if err != nil {
 		t.Fatalf("error decoding user payload: %v", err)
 	}

@@ -22,21 +22,21 @@ func (as *Server) Webhooks(w http.ResponseWriter, r *http.Request) {
 			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
 			return
 		}
-		pagedJSONResponse(w, http.StatusOK, pp, whs, total)
+		ListResponse(w, whs, total, http.StatusOK)
 
 	case r.Method == "POST":
 		wh := models.Webhook{}
 		err := json.NewDecoder(r.Body).Decode(&wh)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: "Invalid JSON structure"}, http.StatusBadRequest)
+			ErrorResponse(w, "Invalid JSON structure", http.StatusBadRequest)
 			return
 		}
 		err = models.PostWebhook(&wh)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		JSONResponse(w, wh, http.StatusCreated)
+		SuccessResponse(w, wh, http.StatusCreated)
 	}
 }
 
@@ -51,12 +51,12 @@ func (as *Server) Webhook(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.Method == "GET":
-		JSONResponse(w, wh, http.StatusOK)
+		SuccessResponse(w, wh, http.StatusOK)
 
 	case r.Method == "DELETE":
 		err = models.DeleteWebhook(id)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		log.Infof("Deleted webhook with id: %d", id)
@@ -67,16 +67,16 @@ func (as *Server) Webhook(w http.ResponseWriter, r *http.Request) {
 		err = json.NewDecoder(r.Body).Decode(&wh)
 		if err != nil {
 			log.Errorf("error decoding webhook: %v", err)
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		wh.Id = id
 		err = models.PutWebhook(&wh)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		JSONResponse(w, wh, http.StatusOK)
+		SuccessResponse(w, wh, http.StatusOK)
 	}
 }
 
@@ -98,9 +98,9 @@ func (as *Server) ValidateWebhook(w http.ResponseWriter, r *http.Request) {
 		payload := validationEvent{Success: true}
 		err = webhook.Send(webhook.EndPoint{URL: wh.URL, Secret: wh.Secret}, payload)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		JSONResponse(w, wh, http.StatusOK)
+		SuccessResponse(w, wh, http.StatusOK)
 	}
 }

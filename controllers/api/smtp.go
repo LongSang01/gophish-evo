@@ -22,20 +22,20 @@ func (as *Server) SendingProfiles(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Error(err)
 		}
-		pagedJSONResponse(w, http.StatusOK, pp, ss, total)
+		ListResponse(w, ss, total, http.StatusOK)
 	//POST: Create a new SMTP and return it as JSON
 	case r.Method == "POST":
 		s := models.SMTP{}
 		// Put the request into a page
 		err := json.NewDecoder(r.Body).Decode(&s)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: "Invalid request"}, http.StatusBadRequest)
+			ErrorResponse(w, "Invalid request", http.StatusBadRequest)
 			return
 		}
 		// Check to make sure the name is unique
 		_, err = models.GetSMTPByName(s.Name, ctx.Get(r, "user_id").(int64))
 		if err != gorm.ErrRecordNotFound {
-			JSONResponse(w, models.Response{Success: false, Message: "SMTP name already in use"}, http.StatusConflict)
+			ErrorResponse(w, "SMTP name already in use", http.StatusConflict)
 			log.Error(err)
 			return
 		}
@@ -43,10 +43,10 @@ func (as *Server) SendingProfiles(w http.ResponseWriter, r *http.Request) {
 		s.UserId = ctx.Get(r, "user_id").(int64)
 		err = models.PostSMTP(&s)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		JSONResponse(w, s, http.StatusCreated)
+		SuccessResponse(w, s, http.StatusCreated)
 	}
 }
 
@@ -62,11 +62,11 @@ func (as *Server) SendingProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.Method == "GET":
-		JSONResponse(w, s, http.StatusOK)
+		SuccessResponse(w, s, http.StatusOK)
 	case r.Method == "DELETE":
 		err = models.DeleteSMTP(id, ctx.Get(r, "user_id").(int64))
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: "Error deleting SMTP"}, http.StatusInternalServerError)
+			ErrorResponse(w, "Error deleting SMTP", http.StatusInternalServerError)
 			return
 		}
 		JSONResponse(w, models.Response{Success: true, Message: "SMTP Deleted Successfully"}, http.StatusOK)
@@ -77,21 +77,21 @@ func (as *Server) SendingProfile(w http.ResponseWriter, r *http.Request) {
 			log.Error(err)
 		}
 		if s.Id != id {
-			JSONResponse(w, models.Response{Success: false, Message: "/:id and /:smtp_id mismatch"}, http.StatusBadRequest)
+			ErrorResponse(w, "/:id and /:smtp_id mismatch", http.StatusBadRequest)
 			return
 		}
 		err = s.Validate()
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		s.ModifiedDate = time.Now().UTC()
 		s.UserId = ctx.Get(r, "user_id").(int64)
 		err = models.PutSMTP(&s)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: "Error updating page"}, http.StatusInternalServerError)
+			ErrorResponse(w, "Error updating SMTP", http.StatusInternalServerError)
 			return
 		}
-		JSONResponse(w, s, http.StatusOK)
+		SuccessResponse(w, s, http.StatusOK)
 	}
 }

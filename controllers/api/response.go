@@ -20,3 +20,28 @@ func JSONResponse(w http.ResponseWriter, d interface{}, c int) {
 	w.WriteHeader(c)
 	fmt.Fprintf(w, "%s", dj)
 }
+
+// SuccessResponse writes {success: true, data: ...} for single-object endpoints.
+func SuccessResponse(w http.ResponseWriter, data interface{}, statusCode int) {
+	JSONResponse(w, map[string]interface{}{
+		"success": true,
+		"data":    data,
+	}, statusCode)
+}
+
+// ErrorResponse writes {success: false, message: "..."} for error responses.
+func ErrorResponse(w http.ResponseWriter, msg string, statusCode int) {
+	JSONResponse(w, map[string]interface{}{
+		"success": false,
+		"message": msg,
+	}, statusCode)
+}
+
+// ListResponse writes {success: true, items: [...], total: N} for paginated list endpoints.
+func ListResponse(w http.ResponseWriter, items interface{}, total int64, statusCode int) {
+	JSONResponse(w, map[string]interface{}{
+		"success": true,
+		"items":   items,
+		"total":   total,
+	}, statusCode)
+}

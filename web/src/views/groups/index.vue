@@ -156,7 +156,7 @@ async function loadGroups() {
   loading.value = true;
   try {
     const result = await getGroups({ pageNum: pagination.current, pageSize: pagination.pageSize });
-    groups.value = result.data || [];
+    groups.value = result.items || [];
     pagination.total = result.total || 0;
   } catch (error) {
     message.error('加载用户组失败');

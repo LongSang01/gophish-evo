@@ -14,7 +14,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gophish/gophish/dialer"
 	log "github.com/gophish/gophish/logger"
-	"github.com/gophish/gophish/models"
 	"github.com/gophish/gophish/util"
 	"github.com/jordan-wright/email"
 )
@@ -55,17 +54,17 @@ type emailResponse struct {
 func (as *Server) ImportGroup(w http.ResponseWriter, r *http.Request) {
 	ts, err := util.ParseCSV(r)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Error parsing CSV"}, http.StatusInternalServerError)
+		ErrorResponse(w, "Error parsing CSV", http.StatusInternalServerError)
 		return
 	}
-	JSONResponse(w, ts, http.StatusOK)
+	SuccessResponse(w, ts, http.StatusOK)
 }
 
 // ImportEmail allows for the importing of email.
 // Returns a Message object
 func (as *Server) ImportEmail(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusBadRequest)
+		ErrorResponse(w, "Method not allowed", http.StatusBadRequest)
 		return
 	}
 	ir := struct {
@@ -74,7 +73,7 @@ func (as *Server) ImportEmail(w http.ResponseWriter, r *http.Request) {
 	}{}
 	err := json.NewDecoder(r.Body).Decode(&ir)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Error decoding JSON Request"}, http.StatusBadRequest)
+		ErrorResponse(w, "Error decoding JSON Request", http.StatusBadRequest)
 		return
 	}
 	e, err := email.NewEmailFromReader(strings.NewReader(ir.Content))
@@ -87,7 +86,7 @@ func (as *Server) ImportEmail(w http.ResponseWriter, r *http.Request) {
 	if ir.ConvertLinks {
 		d, err := goquery.NewDocumentFromReader(bytes.NewReader(e.HTML))
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		d.Find("a").Each(func(i int, a *goquery.Selection) {
@@ -95,7 +94,7 @@ func (as *Server) ImportEmail(w http.ResponseWriter, r *http.Request) {
 		})
 		h, err := d.Html()
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		e.HTML = []byte(h)
@@ -105,7 +104,7 @@ func (as *Server) ImportEmail(w http.ResponseWriter, r *http.Request) {
 		Text:    string(e.Text),
 		HTML:    string(e.HTML),
 	}
-	JSONResponse(w, er, http.StatusOK)
+	SuccessResponse(w, er, http.StatusOK)
 }
 
 // ImportSite allows for the importing of HTML from a website
@@ -114,16 +113,16 @@ func (as *Server) ImportEmail(w http.ResponseWriter, r *http.Request) {
 func (as *Server) ImportSite(w http.ResponseWriter, r *http.Request) {
 	cr := cloneRequest{}
 	if r.Method != "POST" {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusBadRequest)
+		ErrorResponse(w, "Method not allowed", http.StatusBadRequest)
 		return
 	}
 	err := json.NewDecoder(r.Body).Decode(&cr)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Error decoding JSON Request"}, http.StatusBadRequest)
+		ErrorResponse(w, "Error decoding JSON Request", http.StatusBadRequest)
 		return
 	}
 	if err = cr.validate(); err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+		ErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	restrictedDialer := dialer.Dialer()
@@ -145,13 +144,13 @@ func (as *Server) ImportSite(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := client.Get(cr.URL)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+		ErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	// Insert the base href tag to better handle relative resources
 	d, err := goquery.NewDocumentFromResponse(resp)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+		ErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	// Assuming we don't want to include resources, we'll need a base href
@@ -170,9 +169,9 @@ func (as *Server) ImportSite(w http.ResponseWriter, r *http.Request) {
 	})
 	h, err := d.Html()
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+		ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	cs := cloneResponse{HTML: h}
-	JSONResponse(w, cs, http.StatusOK)
+	SuccessResponse(w, cs, http.StatusOK)
 }

@@ -704,7 +704,7 @@ async function loadReports(id: number) {
       pageNum: reportPagination.current,
       pageSize: reportPagination.pageSize,
     });
-    reports.value = data.data || data || [];
+    reports.value = data.items || data.data || [];
     reportsTotal.value = data.total ?? reports.value.length;
     reportPagination.total = data.total ?? reports.value.length;
   } catch (error) {

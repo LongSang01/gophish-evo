@@ -99,7 +99,7 @@ async function loadWebhooks() {
   loading.value = true;
   try {
     const result = await getWebhooks({ pageNum: pagination.current, pageSize: pagination.pageSize });
-    webhooks.value = result.data || [];
+    webhooks.value = result.items || [];
     pagination.total = result.total || 0;
   } catch (error) {
     message.error('加载Webhooks失败');

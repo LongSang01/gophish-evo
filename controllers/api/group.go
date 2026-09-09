@@ -24,29 +24,29 @@ func (as *Server) Groups(w http.ResponseWriter, r *http.Request) {
 			JSONResponse(w, models.Response{Success: false, Message: "No groups found"}, http.StatusNotFound)
 			return
 		}
-		pagedJSONResponse(w, http.StatusOK, pp, gs, total)
+		ListResponse(w, gs, total, http.StatusOK)
 	//POST: Create a new group and return it as JSON
 	case r.Method == "POST":
 		g := models.Group{}
 		// Put the request into a group
 		err := json.NewDecoder(r.Body).Decode(&g)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: "Invalid JSON structure"}, http.StatusBadRequest)
+			ErrorResponse(w, "Invalid JSON structure", http.StatusBadRequest)
 			return
 		}
 		_, err = models.GetGroupByName(g.Name, ctx.Get(r, "user_id").(int64))
 		if err != gorm.ErrRecordNotFound {
-			JSONResponse(w, models.Response{Success: false, Message: "Group name already in use"}, http.StatusConflict)
+			ErrorResponse(w, "Group name already in use", http.StatusConflict)
 			return
 		}
 		g.ModifiedDate = time.Now().UTC()
 		g.UserId = ctx.Get(r, "user_id").(int64)
 		err = models.PostGroup(&g)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		JSONResponse(w, g, http.StatusCreated)
+		SuccessResponse(w, g, http.StatusCreated)
 	}
 }
 
@@ -60,7 +60,7 @@ func (as *Server) GroupsSummary(w http.ResponseWriter, r *http.Request) {
 			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
 			return
 		}
-		JSONResponse(w, gs, http.StatusOK)
+		SuccessResponse(w, gs, http.StatusOK)
 	}
 }
 
@@ -76,11 +76,11 @@ func (as *Server) Group(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.Method == "GET":
-		JSONResponse(w, g, http.StatusOK)
+		SuccessResponse(w, g, http.StatusOK)
 	case r.Method == "DELETE":
 		err = models.DeleteGroup(&g)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: "Error deleting group"}, http.StatusInternalServerError)
+			ErrorResponse(w, "Error deleting group", http.StatusInternalServerError)
 			return
 		}
 		JSONResponse(w, models.Response{Success: true, Message: "Group deleted successfully!"}, http.StatusOK)
@@ -90,21 +90,21 @@ func (as *Server) Group(w http.ResponseWriter, r *http.Request) {
 		err = json.NewDecoder(r.Body).Decode(&g)
 		if err != nil {
 			log.Errorf("error decoding group: %v", err)
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		if g.Id != id {
-			JSONResponse(w, models.Response{Success: false, Message: "Error: /:id and group_id mismatch"}, http.StatusInternalServerError)
+			ErrorResponse(w, "Error: /:id and group_id mismatch", http.StatusInternalServerError)
 			return
 		}
 		g.ModifiedDate = time.Now().UTC()
 		g.UserId = ctx.Get(r, "user_id").(int64)
 		err = models.PutGroup(&g)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		JSONResponse(w, g, http.StatusOK)
+		SuccessResponse(w, g, http.StatusOK)
 	}
 }
 
@@ -116,9 +116,9 @@ func (as *Server) GroupSummary(w http.ResponseWriter, r *http.Request) {
 		id, _ := strconv.ParseInt(vars["id"], 0, 64)
 		g, err := models.GetGroupSummary(id, ctx.Get(r, "user_id").(int64))
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: "Group not found"}, http.StatusNotFound)
+			ErrorResponse(w, "Group not found", http.StatusNotFound)
 			return
 		}
-		JSONResponse(w, g, http.StatusOK)
+		SuccessResponse(w, g, http.StatusOK)
 	}
 }

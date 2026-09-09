@@ -24,7 +24,7 @@ func (as *Server) IMAPServerValidate(w http.ResponseWriter, r *http.Request) {
 		}
 		err = imap.Validate(&im)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusOK)
+			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		JSONResponse(w, models.Response{Success: true, Message: "Successful login."}, http.StatusCreated)
@@ -40,7 +40,7 @@ func (as *Server) IMAPServer(w http.ResponseWriter, r *http.Request) {
 			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
 			return
 		}
-		JSONResponse(w, ss, http.StatusOK)
+		SuccessResponse(w, ss, http.StatusOK)
 
 	// POST: Update database
 	case r.Method == "POST":

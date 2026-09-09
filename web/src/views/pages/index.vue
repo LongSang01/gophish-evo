@@ -181,7 +181,7 @@ async function loadPages() {
   loading.value = true;
   try {
     const result = await getPages({ pageNum: pagination.current, pageSize: pagination.pageSize });
-    pages.value = result.data || [];
+    pages.value = result.items || [];
     pagination.total = result.total || 0;
   } catch (error) {
     message.error('加载落地页失败');

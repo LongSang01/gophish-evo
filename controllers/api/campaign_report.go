@@ -84,10 +84,10 @@ func (as *Server) CampaignReports(w http.ResponseWriter, r *http.Request) {
 	pp := parsePagination(r)
 	reports, total, err := models.GetCampaignReports(id, pp)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+		ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	pagedJSONResponse(w, http.StatusOK, pp, reports, total)
+	ListResponse(w, reports, total, http.StatusOK)
 }
 
 // CampaignReportsExport downloads the collected report records as a CSV file.
@@ -165,8 +165,8 @@ func (as *Server) CampaignReportSummary(w http.ResponseWriter, r *http.Request) 
 	pp := parsePagination(r)
 	reports, total, err := models.GetCampaignReportSummary(id, pp)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+		ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	pagedJSONResponse(w, http.StatusOK, pp, reports, total)
+	ListResponse(w, reports, total, http.StatusOK)
 }

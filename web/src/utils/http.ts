@@ -29,7 +29,21 @@ service.interceptors.request.use(
 // Response interceptor
 service.interceptors.response.use(
   (response: AxiosResponse) => {
-    return response.data;
+    const body = response.data;
+    // If the response has a success field and it's false, treat as error
+    if (body && typeof body === 'object' && 'success' in body && !body.success) {
+      return Promise.reject(new Error(body.message || '请求失败'));
+    }
+    // List response: {success, items, total}
+    if (body && typeof body === 'object' && 'items' in body) {
+      return body;
+    }
+    // Single object response: {success, data}
+    if (body && typeof body === 'object' && 'data' in body && 'success' in body) {
+      return body.data;
+    }
+    // Fallback: return raw body (login, logout, action responses, etc.)
+    return body;
   },
   (error) => {
     if (error.response) {

@@ -145,7 +145,7 @@ func (as *Server) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u := ctx.Get(r, "user").(models.User)
-	JSONResponse(w, u, http.StatusOK)
+	SuccessResponse(w, u, http.StatusOK)
 }
 
 // ResetPasswordRequired checks if the current user needs to reset their password
@@ -156,7 +156,7 @@ func (as *Server) ResetPasswordRequired(w http.ResponseWriter, r *http.Request) 
 	}
 
 	u := ctx.Get(r, "user").(models.User)
-	JSONResponse(w, map[string]bool{
+	SuccessResponse(w, map[string]bool{
 		"password_change_required": u.PasswordChangeRequired,
 	}, http.StatusOK)
 }

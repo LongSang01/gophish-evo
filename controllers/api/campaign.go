@@ -25,19 +25,19 @@ func (as *Server) Campaigns(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Error(err)
 		}
-		pagedJSONResponse(w, http.StatusOK, pp, cs, total)
+		ListResponse(w, cs, total, http.StatusOK)
 	//POST: Create a new campaign and return it as JSON
 	case r.Method == "POST":
 		c := models.Campaign{}
 		// Put the request into a campaign
 		err := json.NewDecoder(r.Body).Decode(&c)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: "Invalid JSON structure"}, http.StatusBadRequest)
+			ErrorResponse(w, "Invalid JSON structure", http.StatusBadRequest)
 			return
 		}
 		err = models.PostCampaign(&c, ctx.Get(r, "user_id").(int64))
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		// If the campaign is scheduled to launch immediately, send it to the worker.
@@ -45,7 +45,7 @@ func (as *Server) Campaigns(w http.ResponseWriter, r *http.Request) {
 		if c.Status == models.CampaignInProgress && c.SourceType != models.SourceTypeClient && c.SourceType != models.SourceTypePage {
 			go as.worker.LaunchCampaign(c)
 		}
-		JSONResponse(w, c, http.StatusCreated)
+		SuccessResponse(w, c, http.StatusCreated)
 	}
 }
 
@@ -60,7 +60,7 @@ func (as *Server) CampaignsSummary(w http.ResponseWriter, r *http.Request) {
 			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
 			return
 		}
-		pagedJSONResponse(w, http.StatusOK, pp, cs.Campaigns, cs.Total)
+		ListResponse(w, cs.Campaigns, cs.Total, http.StatusOK)
 	}
 }
 
@@ -77,7 +77,7 @@ func (as *Server) DashboardStats(w http.ResponseWriter, r *http.Request) {
 		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
 		return
 	}
-	JSONResponse(w, resp, http.StatusOK)
+	SuccessResponse(w, resp, http.StatusOK)
 }
 
 // Campaign returns details about the requested campaign. If the campaign is not
@@ -93,11 +93,11 @@ func (as *Server) Campaign(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.Method == "GET":
-		JSONResponse(w, c, http.StatusOK)
+		SuccessResponse(w, c, http.StatusOK)
 	case r.Method == "DELETE":
 		err = models.DeleteCampaign(id)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: "Error deleting campaign"}, http.StatusInternalServerError)
+			ErrorResponse(w, "Error deleting campaign", http.StatusInternalServerError)
 			return
 		}
 		JSONResponse(w, models.Response{Success: true, Message: "Campaign deleted successfully!"}, http.StatusOK)
@@ -117,7 +117,7 @@ func (as *Server) CampaignResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == "GET" {
-		JSONResponse(w, cr, http.StatusOK)
+		SuccessResponse(w, cr, http.StatusOK)
 		return
 	}
 }
@@ -252,7 +252,7 @@ func (as *Server) CampaignSummary(w http.ResponseWriter, r *http.Request) {
 			log.Error(err)
 			return
 		}
-		JSONResponse(w, cs, http.StatusOK)
+		SuccessResponse(w, cs, http.StatusOK)
 	}
 }
 

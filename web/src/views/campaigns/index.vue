@@ -484,7 +484,7 @@ async function loadCampaigns() {
       pageNum: pagination.current,
       pageSize: pagination.pageSize,
     });
-    campaigns.value = result.data || result.campaigns || [];
+    campaigns.value = result.items || [];
     pagination.total = result.total || 0;
   } catch (error) {
     message.error("加载活动列表失败");
@@ -504,7 +504,7 @@ async function loadDropdownData() {
   const extractPage = (result: any, page: DropdownPageState) => {
     if (result.status === "fulfilled") {
       const val = result.value;
-      const items = Array.isArray(val) ? val : val?.data ?? [];
+      const items = Array.isArray(val) ? val : val?.items ?? val?.data ?? [];
       page.total = Array.isArray(val) ? items.length : (val?.total ?? items.length);
       page.noMore = items.length < page.pageSize;
       return items;
@@ -538,7 +538,7 @@ async function loadMoreTemplates() {
   try {
     tplPage.current++;
     const result = await getTemplates({ pageNum: tplPage.current, pageSize: tplPage.pageSize });
-    const items = Array.isArray(result) ? result : result?.data ?? [];
+    const items = Array.isArray(result) ? result : result?.items ?? result?.data ?? [];
     templates.value = [...templates.value, ...items];
     tplPage.noMore = items.length < tplPage.pageSize;
   } catch {
@@ -553,7 +553,7 @@ async function loadMoreGroups() {
   try {
     grpPage.current++;
     const result = await getGroups({ pageNum: grpPage.current, pageSize: grpPage.pageSize });
-    const items = Array.isArray(result) ? result : result?.data ?? [];
+    const items = Array.isArray(result) ? result : result?.items ?? result?.data ?? [];
     groups.value = [...groups.value, ...items];
     grpPage.noMore = items.length < grpPage.pageSize;
   } catch {
@@ -568,7 +568,7 @@ async function loadMoreSmtp() {
   try {
     smtpPage.current++;
     const result = await getSMTPProfiles({ pageNum: smtpPage.current, pageSize: smtpPage.pageSize });
-    const items = Array.isArray(result) ? result : result?.data ?? [];
+    const items = Array.isArray(result) ? result : result?.items ?? result?.data ?? [];
     smtpProfiles.value = [...smtpProfiles.value, ...items];
     smtpPage.noMore = items.length < smtpPage.pageSize;
   } catch {
@@ -583,7 +583,7 @@ async function loadMorePages() {
   try {
     pgPage.current++;
     const result = await getPages({ pageNum: pgPage.current, pageSize: pgPage.pageSize });
-    const items = Array.isArray(result) ? result : result?.data ?? [];
+    const items = Array.isArray(result) ? result : result?.items ?? result?.data ?? [];
     pages.value = [...pages.value, ...items];
     pgPage.noMore = items.length < pgPage.pageSize;
   } catch {
