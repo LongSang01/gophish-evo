@@ -1,14 +1,14 @@
-import axios from 'axios';
-import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { message } from 'ant-design-vue';
-import { useUserStore } from '@/store/modules/user';
+import axios from "axios";
+import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
+import { message } from "ant-design-vue";
+import { useUserStore } from "@/store/modules/user";
 
 // Create axios instance
 const service: AxiosInstance = axios.create({
-  baseURL: '/api',
+  baseURL: "/api",
   timeout: 30000,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
 
@@ -23,7 +23,7 @@ service.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 // Response interceptor
@@ -31,15 +31,25 @@ service.interceptors.response.use(
   (response: AxiosResponse) => {
     const body = response.data;
     // If the response has a success field and it's false, treat as error
-    if (body && typeof body === 'object' && 'success' in body && !body.success) {
-      return Promise.reject(new Error(body.message || '请求失败'));
+    if (
+      body &&
+      typeof body === "object" &&
+      "success" in body &&
+      !body.success
+    ) {
+      return Promise.reject(new Error(body.message || "请求失败"));
     }
     // List response: {success, items, total}
-    if (body && typeof body === 'object' && 'items' in body) {
+    if (body && typeof body === "object" && "items" in body) {
       return body;
     }
     // Single object response: {success, data}
-    if (body && typeof body === 'object' && 'data' in body && 'success' in body) {
+    if (
+      body &&
+      typeof body === "object" &&
+      "data" in body &&
+      "success" in body
+    ) {
       return body.data;
     }
     // Fallback: return raw body (login, logout, action responses, etc.)
@@ -50,45 +60,47 @@ service.interceptors.response.use(
       const { status, data } = error.response;
       switch (status) {
         case 401:
-          // Don't redirect if already on login page (login failure)
-          if (!window.location.pathname.startsWith('/login')) {
-            message.error('登录已过期，请重新登录');
+          if (window.location.pathname.startsWith("/login")) {
+            // Login failure: show the server error message directly
+            message.error(data?.message || "请求失败");
+          } else {
+            message.error("登录已过期，请重新登录");
             const userStore = useUserStore();
             userStore.clearToken();
-            window.location.href = '/login';
+            window.location.href = "/login";
           }
-          break;
+          return Promise.reject(new Error(data?.message || "请求失败"));
         case 403:
-          message.error('没有权限访问');
+          message.error("没有权限访问");
           break;
         case 404:
-          message.error('请求的资源不存在');
+          message.error("请求的资源不存在");
           break;
         case 500:
-          message.error('服务器错误');
+          message.error("服务器错误");
           break;
         default:
-          message.error(data?.message || '请求失败');
+          message.error(data?.message || "请求失败");
       }
     } else {
-      message.error('网络错误');
+      message.error("网络错误");
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 // HTTP methods
 export const defHttp = {
   get: <T = any>(config: AxiosRequestConfig): Promise<T> => {
-    return service({ ...config, method: 'GET' });
+    return service({ ...config, method: "GET" });
   },
   post: <T = any>(config: AxiosRequestConfig): Promise<T> => {
-    return service({ ...config, method: 'POST' });
+    return service({ ...config, method: "POST" });
   },
   put: <T = any>(config: AxiosRequestConfig): Promise<T> => {
-    return service({ ...config, method: 'PUT' });
+    return service({ ...config, method: "PUT" });
   },
   delete: <T = any>(config: AxiosRequestConfig): Promise<T> => {
-    return service({ ...config, method: 'DELETE' });
+    return service({ ...config, method: "DELETE" });
   },
 };

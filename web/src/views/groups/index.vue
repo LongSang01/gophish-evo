@@ -22,7 +22,7 @@
             <a-tag color="cyan">{{ record.name }}</a-tag>
           </template>
           <template v-if="column.key === 'num_targets'">
-            <a-tag :color="targetCountColor(record.num_targets || 0)">{{ record.num_targets || 0 }}</a-tag>
+            <a-tag :color="targetCountColor(record.total_targets ?? record.num_targets ?? 0)">{{ record.total_targets ?? record.num_targets ?? 0 }}</a-tag>
           </template>
           <template v-if="column.key === 'modified_date'">
             {{ formatDate(record.modified_date) }}
@@ -43,7 +43,7 @@
       :title="editingGroup ? '编辑用户组' : '新建用户组'"
       @ok="handleSave"
       :confirm-loading="saving"
-      width="800px"
+      width="900px"
     >
       <a-form :model="formData" layout="vertical">
         <a-form-item label="用户组名称" required>
@@ -53,7 +53,7 @@
           <a-table
             :columns="targetColumns"
             :data-source="formData.targets"
-            :pagination="false"
+            :pagination="targetPagination"
             size="small"
             row-key="uid"
           >
@@ -74,7 +74,8 @@
               </template>
             </template>
           </a-table>
-          <a-space style="margin-top: 8px">
+          <div style="margin-top: 8px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+          <a-space>
             <a-button @click="addTarget">
               <PlusOutlined /> 添加用户
             </a-button>
@@ -93,6 +94,7 @@
           </a-space>
           <div class="csv-format-hint">
             CSV格式：email, full_name, position
+          </div>
           </div>
         </a-form-item>
       </a-form>
@@ -132,6 +134,18 @@ const pagination = reactive({
 const formData = ref({
   name: '',
   targets: [] as any[],
+});
+
+const targetPagination = reactive({
+  current: 1,
+  pageSize: 20,
+  total: 0,
+  showSizeChanger: true,
+  showTotal: (total: number) => `共 ${total} 条`,
+  onChange: (page: number, pageSize: number) => {
+    targetPagination.current = page;
+    targetPagination.pageSize = pageSize;
+  },
 });
 
 const columns = [
@@ -182,6 +196,8 @@ function showCreateModal() {
     name: '',
     targets: [],
   };
+  targetPagination.current = 1;
+  targetPagination.total = 0;
   modalVisible.value = true;
 }
 
@@ -194,10 +210,10 @@ async function showEditModal(group: any) {
   try {
     const full = await getGroup(group.id);
     editingGroup.value = full;
-    formData.value = {
-      name: full.name,
-      targets: full.targets ? assignUids([...full.targets]) : [],
-    };
+    const targets = full.targets ? assignUids([...full.targets]) : [];
+    formData.value = { name: full.name, targets };
+    targetPagination.current = 1;
+    targetPagination.total = targets.length;
     modalVisible.value = true;
   } catch {
     message.error('加载用户组详情失败');
@@ -208,10 +224,10 @@ async function handleDuplicate(group: any) {
   try {
     const full = await getGroup(group.id);
     editingGroup.value = null;
-    formData.value = {
-      name: `${full.name} (副本)`,
-      targets: full.targets ? assignUids([...full.targets]) : [],
-    };
+    const targets = full.targets ? assignUids([...full.targets]) : [];
+    formData.value = { name: `${full.name} (副本)`, targets };
+    targetPagination.current = 1;
+    targetPagination.total = targets.length;
     modalVisible.value = true;
   } catch {
     message.error('加载用户组详情失败');
@@ -219,16 +235,19 @@ async function handleDuplicate(group: any) {
 }
 
 function addTarget() {
-  formData.value.targets.push({
-    uid: ++targetUid,
-    email: '',
-    full_name: '',
-    position: '',
-  });
+  const t = { uid: ++targetUid, email: '', full_name: '', position: '' };
+  formData.value.targets.push(t);
+  targetPagination.total = formData.value.targets.length;
+  // Jump to last page to show the newly added row
+  targetPagination.current = Math.ceil(formData.value.targets.length / targetPagination.pageSize);
 }
 
 function removeTarget(index: number) {
   formData.value.targets.splice(index, 1);
+  targetPagination.total = formData.value.targets.length;
+  // Clamp current page
+  const maxPage = Math.max(1, Math.ceil(formData.value.targets.length / targetPagination.pageSize));
+  if (targetPagination.current > maxPage) targetPagination.current = maxPage;
 }
 
 function downloadCSVTemplate() {
@@ -270,6 +289,7 @@ async function handleCsvUpload(file: File) {
     if (Array.isArray(targets) && targets.length > 0) {
       assignUids(targets);
       formData.value.targets.push(...targets);
+      targetPagination.total = formData.value.targets.length;
       message.success(`已导入 ${targets.length} 个用户`);
     } else {
       message.warning('CSV 文件为空或格式不正确');
@@ -294,6 +314,7 @@ async function handleCsvUpload(file: File) {
       }
       assignUids(newTargets);
       formData.value.targets.push(...newTargets);
+      targetPagination.total = formData.value.targets.length;
       message.success(`已导入 ${newTargets.length} 个用户`);
     };
     reader.readAsText(file);
