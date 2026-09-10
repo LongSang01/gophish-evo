@@ -50,14 +50,20 @@
           <a-input v-model:value="formData.name" placeholder="输入用户组名称" />
         </a-form-item>
         <a-form-item label="目标用户">
+          <a-input-search
+            v-model:value="targetSearch"
+            placeholder="搜索邮箱、姓名、职位"
+            style="margin-bottom: 12px"
+            allow-clear
+          />
           <a-table
             :columns="targetColumns"
-            :data-source="formData.targets"
+            :data-source="filteredTargets"
             :pagination="targetPagination"
             size="small"
             row-key="uid"
           >
-            <template #bodyCell="{ column, record, index }">
+            <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'email'">
                 <a-input v-model:value="record.email" size="small" />
               </template>
@@ -68,7 +74,7 @@
                 <a-input v-model:value="record.position" size="small" />
               </template>
               <template v-if="column.key === 'action'">
-                <a-button size="small" danger @click="removeTarget(index)">
+                <a-button size="small" danger @click="removeTarget(record._origIndex)">
                   <DeleteOutlined />
                 </a-button>
               </template>
@@ -105,7 +111,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import {
   PlusOutlined,
@@ -131,15 +137,29 @@ const pagination = reactive({
   showTotal: (total: number) => `共 ${total} 条`,
 });
 
+const targetSearch = ref('');
+
 const formData = ref({
   name: '',
   targets: [] as any[],
 });
 
+// Filtered targets based on search query
+const filteredTargets = computed(() => {
+  const q = targetSearch.value.trim().toLowerCase();
+  if (!q) return formData.value.targets.map((t, i) => ({ ...t, _origIndex: i }));
+  return formData.value.targets
+    .map((t, i) => ({ ...t, _origIndex: i }))
+    .filter(t =>
+      (t.email || '').toLowerCase().includes(q) ||
+      (t.full_name || '').toLowerCase().includes(q) ||
+      (t.position || '').toLowerCase().includes(q)
+    );
+});
+
 const targetPagination = reactive({
   current: 1,
   pageSize: 20,
-  total: 0,
   showSizeChanger: true,
   showTotal: (total: number) => `共 ${total} 条`,
   onChange: (page: number, pageSize: number) => {
@@ -196,8 +216,8 @@ function showCreateModal() {
     name: '',
     targets: [],
   };
+  targetSearch.value = '';
   targetPagination.current = 1;
-  targetPagination.total = 0;
   modalVisible.value = true;
 }
 
@@ -212,8 +232,8 @@ async function showEditModal(group: any) {
     editingGroup.value = full;
     const targets = full.targets ? assignUids([...full.targets]) : [];
     formData.value = { name: full.name, targets };
+    targetSearch.value = '';
     targetPagination.current = 1;
-    targetPagination.total = targets.length;
     modalVisible.value = true;
   } catch {
     message.error('加载用户组详情失败');
@@ -226,8 +246,8 @@ async function handleDuplicate(group: any) {
     editingGroup.value = null;
     const targets = full.targets ? assignUids([...full.targets]) : [];
     formData.value = { name: `${full.name} (副本)`, targets };
+    targetSearch.value = '';
     targetPagination.current = 1;
-    targetPagination.total = targets.length;
     modalVisible.value = true;
   } catch {
     message.error('加载用户组详情失败');
@@ -237,14 +257,12 @@ async function handleDuplicate(group: any) {
 function addTarget() {
   const t = { uid: ++targetUid, email: '', full_name: '', position: '' };
   formData.value.targets.push(t);
-  targetPagination.total = formData.value.targets.length;
   // Jump to last page to show the newly added row
   targetPagination.current = Math.ceil(formData.value.targets.length / targetPagination.pageSize);
 }
 
 function removeTarget(index: number) {
   formData.value.targets.splice(index, 1);
-  targetPagination.total = formData.value.targets.length;
   // Clamp current page
   const maxPage = Math.max(1, Math.ceil(formData.value.targets.length / targetPagination.pageSize));
   if (targetPagination.current > maxPage) targetPagination.current = maxPage;
@@ -289,7 +307,6 @@ async function handleCsvUpload(file: File) {
     if (Array.isArray(targets) && targets.length > 0) {
       assignUids(targets);
       formData.value.targets.push(...targets);
-      targetPagination.total = formData.value.targets.length;
       message.success(`已导入 ${targets.length} 个用户`);
     } else {
       message.warning('CSV 文件为空或格式不正确');
@@ -314,7 +331,6 @@ async function handleCsvUpload(file: File) {
       }
       assignUids(newTargets);
       formData.value.targets.push(...newTargets);
-      targetPagination.total = formData.value.targets.length;
       message.success(`已导入 ${newTargets.length} 个用户`);
     };
     reader.readAsText(file);
