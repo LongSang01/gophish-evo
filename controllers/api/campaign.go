@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	ctx "github.com/gophish/gophish/context"
 	log "github.com/gophish/gophish/logger"
@@ -111,6 +113,11 @@ func (as *Server) Campaign(w http.ResponseWriter, r *http.Request) {
 }
 
 // CampaignResultsExport downloads the campaign results as a CSV file.
+// For email campaigns, each row includes the recipient's fixed fields, event
+// timestamps (sent / opened / clicked / data submitted / reported), plus any
+// dynamic data captured from DataSubmit events (e.g. submitted credentials).
+// This is the single comprehensive CSV export for email campaigns, combining
+// what used to be separate "results" and "events" exports.
 func (as *Server) CampaignResultsExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -124,27 +131,115 @@ func (as *Server) CampaignResultsExport(w http.ResponseWriter, r *http.Request) 
 		ErrorResponse(w, "Campaign not found", http.StatusNotFound)
 		return
 	}
-	fixedKeys := []string{"id", "smtp_id", "status", "ip", "latitude", "longitude", "send_date", "reported", "modified_date", "smtp_from_address", "email", "full_name", "position"}
-	if len(cr.Results) > 0 {
-		// Mirror the original frontend export, which derived the CSV columns from
-		// Object.keys() on the first result record (i.e. the JSON field order).
-		if keys, err := jsonKeys(cr.Results[0]); err == nil && len(keys) > 0 {
-			// Exclude the nested "events" key from CSV — events have their own export endpoint.
-			filtered := keys[:0]
-			for _, k := range keys {
-				if k != "events" {
-					filtered = append(filtered, k)
-				}
-			}
-			fixedKeys = filtered
-		}
+	fixedKeys := []string{
+		"id", "email", "full_name", "position", "status", "ip",
+		"send_date", "sent_time", "opened_time", "clicked_time",
+		"data_submitted_time", "reported_time",
+		"reported", "modified_date", "smtp_from_address",
 	}
 	rows := make([]util.CSVRow, 0, len(cr.Results))
 	for i := range cr.Results {
-		row := util.CSVRow{Fixed: make([]interface{}, len(fixedKeys))}
-		if m, err := resultMap(&cr.Results[i]); err == nil {
-			for j, k := range fixedKeys {
-				row.Fixed[j] = m[k]
+		res := &cr.Results[i]
+		// Collect the earliest timestamp for each event type
+		var sentTime, openedTime, clickedTime, dataSubmitTime, reportedTime time.Time
+		for _, ev := range res.Events {
+			switch ev.Message {
+			case models.EventSent:
+				if sentTime.IsZero() || ev.Time.Before(sentTime) {
+					sentTime = ev.Time
+				}
+			case models.EventOpened:
+				if openedTime.IsZero() || ev.Time.Before(openedTime) {
+					openedTime = ev.Time
+				}
+			case models.EventClicked:
+				if clickedTime.IsZero() || ev.Time.Before(clickedTime) {
+					clickedTime = ev.Time
+				}
+			case models.EventDataSubmit:
+				if dataSubmitTime.IsZero() || ev.Time.Before(dataSubmitTime) {
+					dataSubmitTime = ev.Time
+				}
+			case models.EventReported:
+				if reportedTime.IsZero() || ev.Time.Before(reportedTime) {
+					reportedTime = ev.Time
+				}
+			}
+		}
+		// Helper: return nil for zero time so the CSV cell is empty
+		zeroToNil := func(t time.Time) interface{} {
+			if t.IsZero() {
+				return nil
+			}
+			return t
+		}
+		row := util.CSVRow{
+			Fixed: []interface{}{
+				res.RId, res.Email, res.FullName, res.Position,
+				res.Status, res.IP,
+				res.SendDate, zeroToNil(sentTime), zeroToNil(openedTime),
+				zeroToNil(clickedTime), zeroToNil(dataSubmitTime),
+				zeroToNil(reportedTime),
+				res.Reported, res.ModifiedDate, res.SMTPFromAddress,
+			},
+			Data: map[string]interface{}{},
+		}
+		// Extract detail data from ALL events, not just DataSubmit.
+		// Every event carries a Details JSON with "browser" (address,
+		// user-agent) and optionally "payload" (form data).  The frontend
+		// timeline shows all of these, so the CSV must include them too.
+		// Columns are prefixed with the event type to avoid collisions
+		// (e.g. clicked_ip, opened_user_agent, data_submitted_password).
+		for _, ev := range res.Events {
+			if ev.Details == "" {
+				continue
+			}
+			detailMap := map[string]interface{}{}
+			if json.Unmarshal([]byte(ev.Details), &detailMap) != nil {
+				continue
+			}
+			// Determine the column-name prefix for this event type
+			prefix := ""
+			switch ev.Message {
+			case models.EventSent:
+				prefix = "sent"
+			case models.EventOpened:
+				prefix = "opened"
+			case models.EventClicked:
+				prefix = "clicked"
+			case models.EventDataSubmit:
+				prefix = "data_submitted"
+			case models.EventReported:
+				prefix = "reported"
+			default:
+				prefix = ev.Message
+			}
+			// Extract browser fields (IP, user-agent, etc.)
+			if browser, ok := detailMap["browser"]; ok {
+				if bm, ok := browser.(map[string]interface{}); ok {
+					for k, v := range bm {
+						colName := prefix + "_" + k
+						if _, exists := row.Data[colName]; !exists {
+							row.Data[colName] = v
+						}
+					}
+				}
+			}
+			// Extract payload fields (submitted form data) — typically
+			// only present on DataSubmit events, but handle any.
+			if payload, ok := detailMap["payload"]; ok {
+				if pm, ok := payload.(map[string]interface{}); ok {
+					for k, v := range pm {
+						colName := prefix + "_" + k
+						if _, exists := row.Data[colName]; !exists {
+							if arr, ok := v.([]interface{}); ok && len(arr) > 0 {
+								row.Data[colName] = fmt.Sprintf("%v", arr[0])
+							} else {
+								row.Data[colName] = v
+							}
+						}
+					}
+				}
 			}
 		}
 		rows = append(rows, row)

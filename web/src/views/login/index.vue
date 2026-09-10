@@ -83,7 +83,7 @@ async function handleLogin() {
     const redirect = route.query.redirect as string;
     router.push(redirect || '/');
   } catch (error: any) {
-    message.error(error?.message || '登录失败');
+    // Error message is already shown by the HTTP interceptor for 401 responses
   } finally {
     loading.value = false;
   }

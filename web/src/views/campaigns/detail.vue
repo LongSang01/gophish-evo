@@ -192,10 +192,7 @@
       <template #extra>
         <a-space>
           <a-button size="small" @click="exportCSV('results')"
-            >导出结果CSV</a-button
-          >
-          <a-button size="small" @click="exportCSV('events')"
-            >导出事件CSV</a-button
+            >导出CSV</a-button
           >
         </a-space>
       </template>
@@ -513,7 +510,6 @@ import {
   getCampaignReportSummary,
   exportCampaignReports,
   exportCampaignResults,
-  exportCampaignEvents,
 } from "@/api/campaigns";
 import QRCode from "qrcode";
 import { formatDate } from "@/utils/format";
@@ -738,14 +734,19 @@ function showReportDetails(record: any) {
 }
 
 function downloadCSVBlob(blob: Blob, filename: string) {
+  if (!(blob instanceof Blob) || blob.size === 0) {
+    message.error("导出数据为空");
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.setAttribute("download", filename);
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  // Delay revoke to ensure the browser has time to start the download
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 async function exportCSV(scope: string) {
@@ -756,12 +757,9 @@ async function exportCSV(scope: string) {
     if (scope === "reports") {
       blob = await exportCampaignReports(id);
       filename = `${campaign.value.name} - 上报.csv`;
-    } else if (scope === "results") {
+    } else {
       blob = await exportCampaignResults(id);
       filename = `${campaign.value.name} - 结果.csv`;
-    } else {
-      blob = await exportCampaignEvents(id);
-      filename = `${campaign.value.name} - 事件.csv`;
     }
   } catch (error) {
     message.error("导出失败");

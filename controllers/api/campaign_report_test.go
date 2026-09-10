@@ -184,7 +184,7 @@ func TestCampaignResultsExport(t *testing.T) {
 	}
 	body := w.Body.String()
 	for _, want := range []string{
-		"id,smtp_id,status,ip,latitude,longitude,send_date,reported,modified_date,smtp_from_address,email,full_name,position",
+		"id,email,full_name,position,status,ip,send_date,sent_time,opened_time,clicked_time,data_submitted_time,reported_time,reported,modified_date,smtp_from_address",
 		"test1@example.com",
 		"test2@example.com",
 	} {

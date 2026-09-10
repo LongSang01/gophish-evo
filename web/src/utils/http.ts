@@ -29,6 +29,10 @@ service.interceptors.request.use(
 // Response interceptor
 service.interceptors.response.use(
   (response: AxiosResponse) => {
+    // Blob responses (CSV export etc.) must be returned as-is
+    if (response.config.responseType === "blob") {
+      return response.data;
+    }
     const body = response.data;
     // If the response has a success field and it's false, treat as error
     if (
@@ -55,9 +59,23 @@ service.interceptors.response.use(
     // Fallback: return raw body (login, logout, action responses, etc.)
     return body;
   },
-  (error) => {
+  async (error) => {
     if (error.response) {
-      const { status, data } = error.response;
+      let { status, data } = error.response;
+      // When responseType is "blob", error data is a Blob — read it to extract
+      // the JSON error message so users see a meaningful error instead of a
+      // broken file download.
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text();
+          const parsed = JSON.parse(text);
+          if (parsed && typeof parsed === "object") {
+            data = parsed;
+          }
+        } catch {
+          // not JSON — ignore
+        }
+      }
       switch (status) {
         case 401:
           if (window.location.pathname.startsWith("/login")) {
