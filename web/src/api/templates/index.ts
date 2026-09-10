@@ -27,14 +27,3 @@ export function deleteTemplate(id: number): Promise<void> {
 export function importEmail(data: { content: string; convert_links: boolean }): Promise<any> {
   return defHttp.post({ url: '/import/email', data });
 }
-
-export function sendTestEmail(data: {
-  template?: { name: string };
-  page?: { name: string };
-  smtp: { name: string };
-  email: string;
-  full_name?: string;
-  position?: string;
-}): Promise<any> {
-  return defHttp.post({ url: '/util/send_test_email', data });
-}

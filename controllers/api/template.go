@@ -15,30 +15,31 @@ import (
 
 // Templates handles the functionality for the /api/templates endpoint
 func (as *Server) Templates(w http.ResponseWriter, r *http.Request) {
-	switch {
-	case r.Method == "GET":
+	uid := ctx.Get(r, "user_id").(int64)
+	switch r.Method {
+	case http.MethodGet:
 		pp := parsePagination(r)
-		ts, total, err := models.GetTemplateSummaries(ctx.Get(r, "user_id").(int64), pp)
+		ts, total, err := models.GetTemplateSummaries(uid, pp)
 		if err != nil {
 			log.Error(err)
+			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 		ListResponse(w, ts, total, http.StatusOK)
-	//POST: Create a new template and return it as JSON
-	case r.Method == "POST":
+	case http.MethodPost:
 		t := models.Template{}
-		// Put the request into a template
 		err := json.NewDecoder(r.Body).Decode(&t)
 		if err != nil {
 			ErrorResponse(w, "Invalid JSON structure", http.StatusBadRequest)
 			return
 		}
-		_, err = models.GetTemplateByName(t.Name, ctx.Get(r, "user_id").(int64))
+		_, err = models.GetTemplateByName(t.Name, uid)
 		if err != gorm.ErrRecordNotFound {
 			ErrorResponse(w, "Template name already in use", http.StatusConflict)
 			return
 		}
 		t.ModifiedDate = time.Now().UTC()
-		t.UserId = ctx.Get(r, "user_id").(int64)
+		t.UserId = uid
 		err = models.PostTemplate(&t)
 		if err == models.ErrTemplateNameNotSpecified {
 			ErrorResponse(w, err.Error(), http.StatusBadRequest)
@@ -54,6 +55,8 @@ func (as *Server) Templates(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		SuccessResponse(w, t, http.StatusCreated)
+	default:
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -61,38 +64,42 @@ func (as *Server) Templates(w http.ResponseWriter, r *http.Request) {
 func (as *Server) Template(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
-	t, err := models.GetTemplate(id, ctx.Get(r, "user_id").(int64))
-	if err != nil {
-		ErrorResponse(w, "Template not found", http.StatusNotFound)
-		return
-	}
-	switch {
-	case r.Method == "GET":
+	uid := ctx.Get(r, "user_id").(int64)
+	switch r.Method {
+	case http.MethodGet:
+		t, err := models.GetTemplate(id, uid)
+		if err != nil {
+			ErrorResponse(w, "Template not found", http.StatusNotFound)
+			return
+		}
 		SuccessResponse(w, t, http.StatusOK)
-	case r.Method == "DELETE":
-		err = models.DeleteTemplate(id, ctx.Get(r, "user_id").(int64))
+	case http.MethodDelete:
+		err := models.DeleteTemplate(id, uid)
 		if err != nil {
 			ErrorResponse(w, "Error deleting template", http.StatusInternalServerError)
 			return
 		}
 		ActionResponse(w, "Template deleted successfully!", http.StatusOK)
-	case r.Method == "PUT":
-		t = models.Template{}
-		err = json.NewDecoder(r.Body).Decode(&t)
+	case http.MethodPut:
+		t := models.Template{}
+		err := json.NewDecoder(r.Body).Decode(&t)
 		if err != nil {
-			log.Error(err)
+			ErrorResponse(w, "Invalid JSON structure", http.StatusBadRequest)
+			return
 		}
 		if t.Id != id {
 			ErrorResponse(w, "Error: /:id and template_id mismatch", http.StatusBadRequest)
 			return
 		}
 		t.ModifiedDate = time.Now().UTC()
-		t.UserId = ctx.Get(r, "user_id").(int64)
+		t.UserId = uid
 		err = models.PutTemplate(&t)
 		if err != nil {
 			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		SuccessResponse(w, t, http.StatusOK)
+	default:
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }

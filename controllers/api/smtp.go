@@ -15,38 +15,40 @@ import (
 
 // SendingProfiles handles requests for the /api/smtp/ endpoint
 func (as *Server) SendingProfiles(w http.ResponseWriter, r *http.Request) {
-	switch {
-	case r.Method == "GET":
+	uid := ctx.Get(r, "user_id").(int64)
+	switch r.Method {
+	case http.MethodGet:
 		pp := parsePagination(r)
-		ss, total, err := models.GetSMTPSummaries(ctx.Get(r, "user_id").(int64), pp)
+		ss, total, err := models.GetSMTPSummaries(uid, pp)
 		if err != nil {
 			log.Error(err)
+			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 		ListResponse(w, ss, total, http.StatusOK)
-	//POST: Create a new SMTP and return it as JSON
-	case r.Method == "POST":
+	case http.MethodPost:
 		s := models.SMTP{}
-		// Put the request into a page
 		err := json.NewDecoder(r.Body).Decode(&s)
 		if err != nil {
 			ErrorResponse(w, "Invalid request", http.StatusBadRequest)
 			return
 		}
-		// Check to make sure the name is unique
-		_, err = models.GetSMTPByName(s.Name, ctx.Get(r, "user_id").(int64))
+		_, err = models.GetSMTPByName(s.Name, uid)
 		if err != gorm.ErrRecordNotFound {
 			ErrorResponse(w, "SMTP name already in use", http.StatusConflict)
 			log.Error(err)
 			return
 		}
 		s.ModifiedDate = time.Now().UTC()
-		s.UserId = ctx.Get(r, "user_id").(int64)
+		s.UserId = uid
 		err = models.PostSMTP(&s)
 		if err != nil {
 			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		SuccessResponse(w, s, http.StatusCreated)
+	default:
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -55,26 +57,28 @@ func (as *Server) SendingProfiles(w http.ResponseWriter, r *http.Request) {
 func (as *Server) SendingProfile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
-	s, err := models.GetSMTP(id, ctx.Get(r, "user_id").(int64))
-	if err != nil {
-		ErrorResponse(w, "SMTP not found", http.StatusNotFound)
-		return
-	}
-	switch {
-	case r.Method == "GET":
+	uid := ctx.Get(r, "user_id").(int64)
+	switch r.Method {
+	case http.MethodGet:
+		s, err := models.GetSMTP(id, uid)
+		if err != nil {
+			ErrorResponse(w, "SMTP not found", http.StatusNotFound)
+			return
+		}
 		SuccessResponse(w, s, http.StatusOK)
-	case r.Method == "DELETE":
-		err = models.DeleteSMTP(id, ctx.Get(r, "user_id").(int64))
+	case http.MethodDelete:
+		err := models.DeleteSMTP(id, uid)
 		if err != nil {
 			ErrorResponse(w, "Error deleting SMTP", http.StatusInternalServerError)
 			return
 		}
 		ActionResponse(w, "SMTP Deleted Successfully", http.StatusOK)
-	case r.Method == "PUT":
-		s = models.SMTP{}
-		err = json.NewDecoder(r.Body).Decode(&s)
+	case http.MethodPut:
+		s := models.SMTP{}
+		err := json.NewDecoder(r.Body).Decode(&s)
 		if err != nil {
-			log.Error(err)
+			ErrorResponse(w, "Invalid JSON structure", http.StatusBadRequest)
+			return
 		}
 		if s.Id != id {
 			ErrorResponse(w, "/:id and /:smtp_id mismatch", http.StatusBadRequest)
@@ -86,12 +90,14 @@ func (as *Server) SendingProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.ModifiedDate = time.Now().UTC()
-		s.UserId = ctx.Get(r, "user_id").(int64)
+		s.UserId = uid
 		err = models.PutSMTP(&s)
 		if err != nil {
 			ErrorResponse(w, "Error updating SMTP", http.StatusInternalServerError)
 			return
 		}
 		SuccessResponse(w, s, http.StatusOK)
+	default:
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }

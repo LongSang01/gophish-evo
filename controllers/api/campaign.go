@@ -20,50 +20,52 @@ import (
 // Campaigns returns a list of campaigns if requested via GET.
 // If requested via POST, APICampaigns creates a new campaign and returns a reference to it.
 func (as *Server) Campaigns(w http.ResponseWriter, r *http.Request) {
-	switch {
-	case r.Method == "GET":
+	uid := ctx.Get(r, "user_id").(int64)
+	switch r.Method {
+	case http.MethodGet:
 		pp := parsePagination(r)
-		cs, total, err := models.GetCampaigns(ctx.Get(r, "user_id").(int64), pp)
-		if err != nil {
-			log.Error(err)
-		}
-		ListResponse(w, cs, total, http.StatusOK)
-	//POST: Create a new campaign and return it as JSON
-	case r.Method == "POST":
-		c := models.Campaign{}
-		// Put the request into a campaign
-		err := json.NewDecoder(r.Body).Decode(&c)
-		if err != nil {
-			ErrorResponse(w, "Invalid JSON structure", http.StatusBadRequest)
-			return
-		}
-		err = models.PostCampaign(&c, ctx.Get(r, "user_id").(int64))
-		if err != nil {
-			ErrorResponse(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		// If the campaign is scheduled to launch immediately, send it to the worker.
-		// Otherwise, the worker will pick it up at the scheduled time
-		if c.Status == models.CampaignInProgress && c.SourceType != models.SourceTypeClient && c.SourceType != models.SourceTypePage {
-			go as.worker.LaunchCampaign(c)
-		}
-		SuccessResponse(w, c, http.StatusCreated)
-	}
-}
-
-// CampaignsSummary returns the summary for the current user's campaigns
-func (as *Server) CampaignsSummary(w http.ResponseWriter, r *http.Request) {
-	switch {
-	case r.Method == "GET":
-		pp := parsePagination(r)
-		cs, err := models.GetCampaignSummaries(ctx.Get(r, "user_id").(int64), pp)
+		cs, total, err := models.GetCampaigns(uid, pp)
 		if err != nil {
 			log.Error(err)
 			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		ListResponse(w, cs.Campaigns, cs.Total, http.StatusOK)
+		ListResponse(w, cs, total, http.StatusOK)
+	case http.MethodPost:
+		c := models.Campaign{}
+		err := json.NewDecoder(r.Body).Decode(&c)
+		if err != nil {
+			ErrorResponse(w, "Invalid JSON structure", http.StatusBadRequest)
+			return
+		}
+		err = models.PostCampaign(&c, uid)
+		if err != nil {
+			ErrorResponse(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if c.Status == models.CampaignInProgress && c.SourceType != models.SourceTypeClient && c.SourceType != models.SourceTypePage {
+			go as.worker.LaunchCampaign(c)
+		}
+		SuccessResponse(w, c, http.StatusCreated)
+	default:
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// CampaignsSummary returns the summary for the current user's campaigns
+func (as *Server) CampaignsSummary(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	pp := parsePagination(r)
+	cs, err := models.GetCampaignSummaries(ctx.Get(r, "user_id").(int64), pp)
+	if err != nil {
+		log.Error(err)
+		ErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	ListResponse(w, cs.Campaigns, cs.Total, http.StatusOK)
 }
 
 // DashboardStats returns lightweight aggregated stats for dashboard charts,
@@ -92,8 +94,8 @@ func (as *Server) Campaign(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
 	uid := ctx.Get(r, "user_id").(int64)
-	switch {
-	case r.Method == "GET":
+	switch r.Method {
+	case http.MethodGet:
 		pp := parsePagination(r)
 		cr, err := models.GetCampaignResults(id, uid, pp)
 		if err != nil {
@@ -102,13 +104,15 @@ func (as *Server) Campaign(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		SuccessResponse(w, cr, http.StatusOK)
-	case r.Method == "DELETE":
+	case http.MethodDelete:
 		err := models.DeleteCampaign(id)
 		if err != nil {
 			ErrorResponse(w, "Error deleting campaign", http.StatusInternalServerError)
 			return
 		}
 		ActionResponse(w, "Campaign deleted successfully!", http.StatusOK)
+	default:
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 

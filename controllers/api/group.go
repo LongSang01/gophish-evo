@@ -16,52 +16,54 @@ import (
 // Groups returns a list of groups if requested via GET.
 // If requested via POST, APIGroups creates a new group and returns a reference to it.
 func (as *Server) Groups(w http.ResponseWriter, r *http.Request) {
-	switch {
-	case r.Method == "GET":
+	uid := ctx.Get(r, "user_id").(int64)
+	switch r.Method {
+	case http.MethodGet:
 		pp := parsePagination(r)
-		gs, err := models.GetGroupSummaries(ctx.Get(r, "user_id").(int64), pp)
+		gs, err := models.GetGroupSummaries(uid, pp)
 		if err != nil {
 			ErrorResponse(w, "No groups found", http.StatusNotFound)
 			return
 		}
 		ListResponse(w, gs.Groups, gs.Total, http.StatusOK)
-	//POST: Create a new group and return it as JSON
-	case r.Method == "POST":
+	case http.MethodPost:
 		g := models.Group{}
-		// Put the request into a group
 		err := json.NewDecoder(r.Body).Decode(&g)
 		if err != nil {
 			ErrorResponse(w, "Invalid JSON structure", http.StatusBadRequest)
 			return
 		}
-		_, err = models.GetGroupByName(g.Name, ctx.Get(r, "user_id").(int64))
+		_, err = models.GetGroupByName(g.Name, uid)
 		if err != gorm.ErrRecordNotFound {
 			ErrorResponse(w, "Group name already in use", http.StatusConflict)
 			return
 		}
 		g.ModifiedDate = time.Now().UTC()
-		g.UserId = ctx.Get(r, "user_id").(int64)
+		g.UserId = uid
 		err = models.PostGroup(&g)
 		if err != nil {
 			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		SuccessResponse(w, g, http.StatusCreated)
+	default:
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
 // GroupsSummary returns a summary of the groups owned by the current user.
 func (as *Server) GroupsSummary(w http.ResponseWriter, r *http.Request) {
-	switch {
-	case r.Method == "GET":
-		gs, err := models.GetGroupSummaries(ctx.Get(r, "user_id").(int64), models.PageParams{})
-		if err != nil {
-			log.Error(err)
-			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		SuccessResponse(w, gs, http.StatusOK)
+	if r.Method != http.MethodGet {
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
+	gs, err := models.GetGroupSummaries(ctx.Get(r, "user_id").(int64), models.PageParams{})
+	if err != nil {
+		log.Error(err)
+		ErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	SuccessResponse(w, gs, http.StatusOK)
 }
 
 // Group returns details about the requested group.
@@ -70,8 +72,8 @@ func (as *Server) Group(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
 	uid := ctx.Get(r, "user_id").(int64)
-	switch {
-	case r.Method == "GET":
+	switch r.Method {
+	case http.MethodGet:
 		q := r.URL.Query()
 		var g models.Group
 		var err error
@@ -86,7 +88,7 @@ func (as *Server) Group(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		SuccessResponse(w, g, http.StatusOK)
-	case r.Method == "DELETE":
+	case http.MethodDelete:
 		g, err := models.GetGroup(id, uid)
 		if err != nil {
 			ErrorResponse(w, "Group not found", http.StatusNotFound)
@@ -98,8 +100,7 @@ func (as *Server) Group(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ActionResponse(w, "Group deleted successfully!", http.StatusOK)
-	case r.Method == "PUT":
-		// Change this to get from URL and uid (don't bother with id in r.Body)
+	case http.MethodPut:
 		g := models.Group{}
 		err := json.NewDecoder(r.Body).Decode(&g)
 		if err != nil {
@@ -119,20 +120,23 @@ func (as *Server) Group(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		SuccessResponse(w, g, http.StatusOK)
+	default:
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
 // GroupSummary returns a summary of the groups owned by the current user.
 func (as *Server) GroupSummary(w http.ResponseWriter, r *http.Request) {
-	switch {
-	case r.Method == "GET":
-		vars := mux.Vars(r)
-		id, _ := strconv.ParseInt(vars["id"], 0, 64)
-		g, err := models.GetGroupSummary(id, ctx.Get(r, "user_id").(int64))
-		if err != nil {
-			ErrorResponse(w, "Group not found", http.StatusNotFound)
-			return
-		}
-		SuccessResponse(w, g, http.StatusOK)
+	if r.Method != http.MethodGet {
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
+	vars := mux.Vars(r)
+	id, _ := strconv.ParseInt(vars["id"], 0, 64)
+	g, err := models.GetGroupSummary(id, ctx.Get(r, "user_id").(int64))
+	if err != nil {
+		ErrorResponse(w, "Group not found", http.StatusNotFound)
+		return
+	}
+	SuccessResponse(w, g, http.StatusOK)
 }

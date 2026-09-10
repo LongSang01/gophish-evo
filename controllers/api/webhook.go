@@ -13,8 +13,8 @@ import (
 
 // Webhooks returns a list of webhooks, both active and disabled
 func (as *Server) Webhooks(w http.ResponseWriter, r *http.Request) {
-	switch {
-	case r.Method == "GET":
+	switch r.Method {
+	case http.MethodGet:
 		pp := parsePagination(r)
 		whs, total, err := models.GetWebhookSummaries(pp)
 		if err != nil {
@@ -23,8 +23,7 @@ func (as *Server) Webhooks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ListResponse(w, whs, total, http.StatusOK)
-
-	case r.Method == "POST":
+	case http.MethodPost:
 		wh := models.Webhook{}
 		err := json.NewDecoder(r.Body).Decode(&wh)
 		if err != nil {
@@ -37,6 +36,8 @@ func (as *Server) Webhooks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		SuccessResponse(w, wh, http.StatusCreated)
+	default:
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -44,27 +45,25 @@ func (as *Server) Webhooks(w http.ResponseWriter, r *http.Request) {
 func (as *Server) Webhook(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
-	wh, err := models.GetWebhook(id)
-	if err != nil {
-		ErrorResponse(w, "Webhook not found", http.StatusNotFound)
-		return
-	}
-	switch {
-	case r.Method == "GET":
+	switch r.Method {
+	case http.MethodGet:
+		wh, err := models.GetWebhook(id)
+		if err != nil {
+			ErrorResponse(w, "Webhook not found", http.StatusNotFound)
+			return
+		}
 		SuccessResponse(w, wh, http.StatusOK)
-
-	case r.Method == "DELETE":
-		err = models.DeleteWebhook(id)
+	case http.MethodDelete:
+		err := models.DeleteWebhook(id)
 		if err != nil {
 			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		log.Infof("Deleted webhook with id: %d", id)
 		ActionResponse(w, "Webhook deleted Successfully!", http.StatusOK)
-
-	case r.Method == "PUT":
-		wh = models.Webhook{}
-		err = json.NewDecoder(r.Body).Decode(&wh)
+	case http.MethodPut:
+		wh := models.Webhook{}
+		err := json.NewDecoder(r.Body).Decode(&wh)
 		if err != nil {
 			log.Errorf("error decoding webhook: %v", err)
 			ErrorResponse(w, err.Error(), http.StatusBadRequest)
@@ -77,30 +76,33 @@ func (as *Server) Webhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		SuccessResponse(w, wh, http.StatusOK)
+	default:
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
 // ValidateWebhook makes an HTTP request to a specified remote url to ensure that it's valid.
 func (as *Server) ValidateWebhook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	type validationEvent struct {
 		Success bool `json:"success"`
 	}
-	switch {
-	case r.Method == "POST":
-		vars := mux.Vars(r)
-		id, _ := strconv.ParseInt(vars["id"], 0, 64)
-		wh, err := models.GetWebhook(id)
-		if err != nil {
-			log.Error(err)
-			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		payload := validationEvent{Success: true}
-		err = webhook.Send(webhook.EndPoint{URL: wh.URL, Secret: wh.Secret}, payload)
-		if err != nil {
-			ErrorResponse(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		SuccessResponse(w, wh, http.StatusOK)
+	vars := mux.Vars(r)
+	id, _ := strconv.ParseInt(vars["id"], 0, 64)
+	wh, err := models.GetWebhook(id)
+	if err != nil {
+		log.Error(err)
+		ErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
+	payload := validationEvent{Success: true}
+	err = webhook.Send(webhook.EndPoint{URL: wh.URL, Secret: wh.Secret}, payload)
+	if err != nil {
+		ErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	SuccessResponse(w, wh, http.StatusOK)
 }

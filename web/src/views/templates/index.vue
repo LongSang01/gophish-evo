@@ -267,10 +267,9 @@ import {
   createTemplate,
   updateTemplate,
   deleteTemplate,
-  sendTestEmail,
   importEmail,
 } from "@/api/templates";
-import { getSMTPProfiles } from "@/api/smtp";
+import { getSMTPProfiles, sendTestEmail } from "@/api/smtp";
 import { formatDate } from "@/utils/format";
 
 const loading = ref(false);

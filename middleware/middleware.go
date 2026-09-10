@@ -2,9 +2,7 @@ package middleware
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"strings"
 
 	ctx "github.com/gophish/gophish/context"
 	"github.com/gophish/gophish/models"
@@ -38,31 +36,23 @@ func GetContext(handler http.Handler) http.HandlerFunc {
 // parameter, or a Bearer token.
 func RequireAPIKey(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		if r.Method == "OPTIONS" {
-			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-			w.Header().Set("Access-Control-Max-Age", "1000")
-			w.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization")
-			return
-		}
 		r.ParseForm()
 		ak := r.Form.Get("api_key")
 		// If we can't get the API key, we'll also check for the
 		// Authorization Bearer token
 		if ak == "" {
-			tokens, ok := r.Header["Authorization"]
-			if ok && len(tokens) >= 1 {
-				ak = tokens[0]
-				ak = strings.TrimPrefix(ak, "Bearer ")
+			ak = r.Header.Get("Authorization")
+			if len(ak) > 7 && ak[:7] == "Bearer " {
+				ak = ak[7:]
 			}
 		}
 		if ak == "" {
-			JSONError(w, http.StatusUnauthorized, "API Key not set")
+			writeJSONError(w, http.StatusUnauthorized, "API Key not set")
 			return
 		}
 		u, err := models.GetUserByAPIKey(ak)
 		if err != nil {
-			JSONError(w, http.StatusUnauthorized, "Invalid API Key")
+			writeJSONError(w, http.StatusUnauthorized, "Invalid API Key")
 			return
 		}
 		r = ctx.Set(r, "user", u)
@@ -76,18 +66,19 @@ func RequireAPIKey(handler http.Handler) http.Handler {
 // objects to accounts with the PermissionModifyObjects permission.
 func EnforceViewOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// If the request is for any non-GET HTTP method, e.g. POST, PUT,
-		// or DELETE, we need to ensure the user has the appropriate
-		// permission.
-		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
-			user := ctx.Get(r, "user").(models.User)
+		if r.Method != http.MethodGet && r.Method != http.MethodOptions {
+			user, ok := ctx.Get(r, "user").(models.User)
+			if !ok {
+				writeJSONError(w, http.StatusUnauthorized, "Authentication required")
+				return
+			}
 			access, err := user.HasPermission(models.PermissionModifyObjects)
 			if err != nil {
-				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				writeJSONError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
 			if !access {
-				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+				writeJSONError(w, http.StatusForbidden, "Insufficient permissions")
 				return
 			}
 		}
@@ -95,20 +86,24 @@ func EnforceViewOnly(next http.Handler) http.Handler {
 	})
 }
 
-// RequirePermission checks to see if the user has the requested permission
-// before executing the handler. If the request is unauthorized, a JSONError
-// is returned.
+// RequirePermission is a middleware that ensures the user has the given
+// permission before executing the handler. If the user does not have the
+// permission, a JSON 403 Forbidden response is returned.
 func RequirePermission(perm string) func(http.Handler) http.HandlerFunc {
 	return func(next http.Handler) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			user := ctx.Get(r, "user").(models.User)
+			user, ok := ctx.Get(r, "user").(models.User)
+			if !ok {
+				writeJSONError(w, http.StatusUnauthorized, "Authentication required")
+				return
+			}
 			access, err := user.HasPermission(perm)
 			if err != nil {
-				JSONError(w, http.StatusInternalServerError, err.Error())
+				writeJSONError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
 			if !access {
-				JSONError(w, http.StatusForbidden, http.StatusText(http.StatusForbidden))
+				writeJSONError(w, http.StatusForbidden, http.StatusText(http.StatusForbidden))
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -127,11 +122,9 @@ func ApplySecurityHeaders(next http.Handler) http.HandlerFunc {
 	}
 }
 
-// JSONError returns an error in JSON format with the given
-// status code and message
-func JSONError(w http.ResponseWriter, c int, m string) {
-	cj, _ := json.MarshalIndent(map[string]interface{}{"success": false, "message": m}, "", "  ")
+// writeJSONError writes a JSON error response with the given status code and message.
+func writeJSONError(w http.ResponseWriter, statusCode int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(c)
-	fmt.Fprintf(w, "%s", cj)
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "message": msg})
 }
