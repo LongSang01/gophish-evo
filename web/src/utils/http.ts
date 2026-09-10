@@ -100,17 +100,20 @@ service.interceptors.response.use(
 );
 
 // HTTP methods
+// The response interceptor unwraps the Axios envelope, so callers receive T
+// directly. The `as unknown as Promise<T>` cast bridges the gap between
+// axios's internal response type and the post-interceptor payload type.
 export const defHttp = {
   get: <T = any>(config: AxiosRequestConfig): Promise<T> => {
-    return service({ ...config, method: "GET" });
+    return service({ ...config, method: "GET" }) as unknown as Promise<T>;
   },
   post: <T = any>(config: AxiosRequestConfig): Promise<T> => {
-    return service({ ...config, method: "POST" });
+    return service({ ...config, method: "POST" }) as unknown as Promise<T>;
   },
   put: <T = any>(config: AxiosRequestConfig): Promise<T> => {
-    return service({ ...config, method: "PUT" });
+    return service({ ...config, method: "PUT" }) as unknown as Promise<T>;
   },
   delete: <T = any>(config: AxiosRequestConfig): Promise<T> => {
-    return service({ ...config, method: "DELETE" });
+    return service({ ...config, method: "DELETE" }) as unknown as Promise<T>;
   },
 };

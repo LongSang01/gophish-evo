@@ -513,7 +513,12 @@ import {
 } from "@/api/campaigns";
 import QRCode from "qrcode";
 import { formatDate } from "@/utils/format";
-import { sourceTypeText, sourceTypeColor, getStatusColor, getStatusText } from "@/utils/campaign";
+import {
+  sourceTypeText,
+  sourceTypeColor,
+  getStatusColor,
+  getStatusText,
+} from "@/utils/campaign";
 
 const route = useRoute();
 const router = useRouter();
@@ -904,7 +909,7 @@ async function handleLaunch() {
 async function handleComplete() {
   Modal.confirm({
     title: "确认完成",
-    content: "确定要完成这个活动吗？这将停止所有待发送的邮件。",
+    content: "确定要完成这个活动吗？这将停止所有后续发送和上报。",
     onOk: async () => {
       try {
         await completeCampaign(campaign.value.id);
