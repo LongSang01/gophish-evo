@@ -17,14 +17,6 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-// LoginResponse represents the login response payload
-type LoginResponse struct {
-	Success bool         `json:"success"`
-	Message string       `json:"message"`
-	Token   string       `json:"token,omitempty"`
-	User    *models.User `json:"user,omitempty"`
-}
-
 // ChangePasswordRequest represents the password change request
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"current_password"`
@@ -35,13 +27,13 @@ type ChangePasswordRequest struct {
 // Login handles user authentication and returns a JWT token
 func (as *Server) Login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		JSONResponse(w, LoginResponse{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		JSONResponse(w, LoginResponse{Success: false, Message: "Invalid request body"}, http.StatusBadRequest)
+		ErrorResponse(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -49,20 +41,20 @@ func (as *Server) Login(w http.ResponseWriter, r *http.Request) {
 	u, err := models.GetUserByUsername(req.Username)
 	if err != nil {
 		log.Error(err)
-		JSONResponse(w, LoginResponse{Success: false, Message: "Invalid username or password"}, http.StatusUnauthorized)
+		ErrorResponse(w, "Invalid username or password", http.StatusUnauthorized)
 		return
 	}
 
 	// Validate password
 	if err := auth.ValidatePassword(req.Password, u.Hash); err != nil {
 		log.Error(err)
-		JSONResponse(w, LoginResponse{Success: false, Message: "Invalid username or password"}, http.StatusUnauthorized)
+		ErrorResponse(w, "Invalid username or password", http.StatusUnauthorized)
 		return
 	}
 
 	// Check if account is locked
 	if u.AccountLocked {
-		JSONResponse(w, LoginResponse{Success: false, Message: "Account is locked"}, http.StatusForbidden)
+		ErrorResponse(w, "Account is locked", http.StatusForbidden)
 		return
 	}
 
@@ -70,7 +62,7 @@ func (as *Server) Login(w http.ResponseWriter, r *http.Request) {
 	token, err := auth.GenerateToken(u.Id, u.Username, u.Role.Slug)
 	if err != nil {
 		log.Error(err)
-		JSONResponse(w, LoginResponse{Success: false, Message: "Error generating token"}, http.StatusInternalServerError)
+		ErrorResponse(w, "Error generating token", http.StatusInternalServerError)
 		return
 	}
 
@@ -80,11 +72,9 @@ func (as *Server) Login(w http.ResponseWriter, r *http.Request) {
 		log.Error(err)
 	}
 
-	JSONResponse(w, LoginResponse{
-		Success: true,
-		Message: "Login successful",
-		Token:   token,
-		User:    &u,
+	SuccessResponse(w, map[string]interface{}{
+		"token": token,
+		"user":  &u,
 	}, http.StatusOK)
 }
 

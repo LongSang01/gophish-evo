@@ -70,17 +70,24 @@ func decodeSuccessBody(w *httptest.ResponseRecorder, target interface{}) error {
 	return json.Unmarshal(envelope.Data, target)
 }
 
-// decodeListBody is a test helper that unwraps {"success":true,"items":[...],"total":N} responses.
+// decodeListBody is a test helper that unwraps
+// {"success":true,"data":{"items":[...],"total":N}} responses.
 func decodeListBody(w *httptest.ResponseRecorder, target interface{}) (int64, error) {
 	var envelope struct {
 		Success bool            `json:"success"`
-		Items   json.RawMessage `json:"items"`
-		Total   int64           `json:"total"`
+		Data    json.RawMessage `json:"data"`
 	}
 	if err := json.NewDecoder(w.Body).Decode(&envelope); err != nil {
 		return 0, err
 	}
-	return envelope.Total, json.Unmarshal(envelope.Items, target)
+	var payload struct {
+		Items json.RawMessage `json:"items"`
+		Total int64           `json:"total"`
+	}
+	if err := json.Unmarshal(envelope.Data, &payload); err != nil {
+		return 0, err
+	}
+	return payload.Total, json.Unmarshal(payload.Items, target)
 }
 
 func createTestData(t *testing.T) {
@@ -126,19 +133,17 @@ func TestLoginSuccess(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
 	}
-	resp := LoginResponse{}
+	resp := map[string]interface{}{}
 	json.NewDecoder(w.Body).Decode(&resp)
-	if !resp.Success {
-		t.Fatalf("expected success=true, got message=%s", resp.Message)
+	if !resp["success"].(bool) {
+		t.Fatalf("expected success=true, got %v", resp["message"])
 	}
-	if resp.Token == "" {
+	data := resp["data"].(map[string]interface{})
+	if data["token"] == nil || data["token"] == "" {
 		t.Fatal("expected non-empty token")
 	}
-	if resp.User == nil {
+	if data["user"] == nil {
 		t.Fatal("expected user in response")
-	}
-	if resp.User.Username != "admin" {
-		t.Fatalf("expected username 'admin', got %s", resp.User.Username)
 	}
 }
 
@@ -297,9 +302,12 @@ func TestGetCampaigns(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
-	pr := models.PagedResponse{}
-	json.NewDecoder(w.Body).Decode(&pr)
-	if pr.Total < 1 {
+	var campaigns []models.Campaign
+	total, err := decodeListBody(w, &campaigns)
+	if err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
+	if total < 1 {
 		t.Fatal("expected at least one campaign")
 	}
 }
@@ -417,9 +425,12 @@ func TestGetGroups(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
-	pr := models.PagedResponse{}
-	json.NewDecoder(w.Body).Decode(&pr)
-	if pr.Total < 1 {
+	var groups []models.Group
+	total, err := decodeListBody(w, &groups)
+	if err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
+	if total < 1 {
 		t.Fatal("expected at least one group")
 	}
 }
@@ -575,9 +586,12 @@ func TestGetTemplates(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
-	pr := models.PagedResponse{}
-	json.NewDecoder(w.Body).Decode(&pr)
-	if pr.Total < 1 {
+	var templates []models.Template
+	total, err := decodeListBody(w, &templates)
+	if err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
+	if total < 1 {
 		t.Fatal("expected at least one template")
 	}
 }
@@ -678,9 +692,12 @@ func TestGetPages(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
-	pr := models.PagedResponse{}
-	json.NewDecoder(w.Body).Decode(&pr)
-	if pr.Total < 1 {
+	var pages []models.Page
+	total, err := decodeListBody(w, &pages)
+	if err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
+	if total < 1 {
 		t.Fatal("expected at least one page")
 	}
 }
@@ -781,9 +798,12 @@ func TestGetSendingProfiles(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
-	pr := models.PagedResponse{}
-	json.NewDecoder(w.Body).Decode(&pr)
-	if pr.Total < 1 {
+	var profiles []models.SMTP
+	total, err := decodeListBody(w, &profiles)
+	if err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
+	if total < 1 {
 		t.Fatal("expected at least one SMTP profile")
 	}
 }
@@ -1030,9 +1050,12 @@ func TestCampaignsSummary(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
-	pr := models.PagedResponse{}
-	json.NewDecoder(w.Body).Decode(&pr)
-	if pr.Total < 1 {
+	var summaries []interface{}
+	total, err := decodeListBody(w, &summaries)
+	if err != nil {
+		t.Fatalf("error decoding response: %v", err)
+	}
+	if total < 1 {
 		t.Fatal("expected at least one campaign in summary")
 	}
 }

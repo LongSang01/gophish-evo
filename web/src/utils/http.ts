@@ -43,20 +43,12 @@ service.interceptors.response.use(
     ) {
       return Promise.reject(new Error(body.message || "请求失败"));
     }
-    // List response: {success, items, total}
-    if (body && typeof body === "object" && "items" in body) {
-      return body;
-    }
-    // Single object response: {success, data}
-    if (
-      body &&
-      typeof body === "object" &&
-      "data" in body &&
-      "success" in body
-    ) {
+    // Unified format: all success responses carry a "data" field.
+    // Unwrap it so callers always get the payload directly.
+    if (body && typeof body === "object" && "data" in body) {
       return body.data;
     }
-    // Fallback: return raw body (login, logout, action responses, etc.)
+    // Fallback: return raw body (login, logout, etc.)
     return body;
   },
   async (error) => {

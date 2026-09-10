@@ -37,20 +37,25 @@ func ErrorResponse(w http.ResponseWriter, msg string, statusCode int) {
 	}, statusCode)
 }
 
-// ListResponse writes {success: true, items: [...], total: N} for paginated list endpoints.
+// ListResponse writes {success: true, data: {items: [...], total: N}} for
+// paginated list endpoints.
 func ListResponse(w http.ResponseWriter, items interface{}, total int64, statusCode int) {
 	JSONResponse(w, map[string]interface{}{
 		"success": true,
-		"items":   items,
-		"total":   total,
+		"data": map[string]interface{}{
+			"items": items,
+			"total": total,
+		},
 	}, statusCode)
 }
 
-// ActionResponse writes {success: true, message: "..."} for action endpoints
-// (delete, launch, complete, etc.).
+// ActionResponse writes {success: true, data: {message: "..."}} for action
+// endpoints (delete, launch, complete, etc.).
 func ActionResponse(w http.ResponseWriter, msg string, statusCode int) {
 	JSONResponse(w, map[string]interface{}{
 		"success": true,
-		"message": msg,
+		"data": map[string]interface{}{
+			"message": msg,
+		},
 	}, statusCode)
 }
