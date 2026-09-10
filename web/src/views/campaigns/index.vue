@@ -458,7 +458,6 @@ const columns = [
 
 onMounted(async () => {
   await loadCampaigns();
-  await loadDropdownData();
   const duplicateId = route.query.duplicate;
   if (duplicateId) {
     handleDuplicateFromDetail(Number(duplicateId));
@@ -470,6 +469,8 @@ async function handleDuplicateFromDetail(id: number) {
     const campaign = await getCampaign(id);
     fillDuplicateForm(campaign);
     isDuplicate.value = true;
+    resetDropdownPages();
+    await loadDropdownData();
     createModalVisible.value = true;
     router.replace({ path: "/campaigns" });
   } catch (error) {

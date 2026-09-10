@@ -383,7 +383,6 @@ const columns = [
 
 onMounted(() => {
   loadTemplates();
-  loadSMTPProfiles();
 });
 
 async function loadTemplates() {
@@ -613,6 +612,9 @@ async function handleTestSend() {
     return;
   }
   testSendForm.value = { smtp_name: "", to: "" };
+  if (smtpProfiles.value.length === 0) {
+    await loadSMTPProfiles();
+  }
   testSendVisible.value = true;
 }
 
