@@ -91,17 +91,17 @@ func (as *Server) Login(w http.ResponseWriter, r *http.Request) {
 // Logout handles user logout
 func (as *Server) Logout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	JSONResponse(w, models.Response{Success: true, Message: "Logged out successfully"}, http.StatusOK)
+	ActionResponse(w, "Logged out successfully", http.StatusOK)
 }
 
 // ChangePassword handles password change requests
 func (as *Server) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -109,20 +109,20 @@ func (as *Server) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	var req ChangePasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Invalid request body"}, http.StatusBadRequest)
+		ErrorResponse(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	// Validate current password
 	if err := auth.ValidatePassword(req.CurrentPassword, u.Hash); err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Current password is incorrect"}, http.StatusBadRequest)
+		ErrorResponse(w, "Current password is incorrect", http.StatusBadRequest)
 		return
 	}
 
 	// Validate and get new password hash
 	newHash, err := auth.ValidatePasswordChange(u.Hash, req.NewPassword, req.ConfirmPassword)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+		ErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -130,17 +130,17 @@ func (as *Server) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	u.Hash = string(newHash)
 	u.PasswordChangeRequired = false
 	if err := models.PutUser(&u); err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Error updating password"}, http.StatusInternalServerError)
+		ErrorResponse(w, "Error updating password", http.StatusInternalServerError)
 		return
 	}
 
-	JSONResponse(w, models.Response{Success: true, Message: "Password changed successfully"}, http.StatusOK)
+	ActionResponse(w, "Password changed successfully", http.StatusOK)
 }
 
 // GetCurrentUser returns the currently authenticated user
 func (as *Server) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -151,7 +151,7 @@ func (as *Server) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 // ResetPasswordRequired checks if the current user needs to reset their password
 func (as *Server) ResetPasswordRequired(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 

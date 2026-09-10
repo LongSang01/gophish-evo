@@ -1324,7 +1324,7 @@ func TestGetCampaignResults(t *testing.T) {
 	c.Groups = []models.Group{{Name: "Test Group"}}
 	models.PostCampaign(&c, 1)
 
-	url := fmt.Sprintf("/api/campaigns/%d/results", c.Id)
+	url := fmt.Sprintf("/api/campaigns/%d", c.Id)
 	r := httptest.NewRequest(http.MethodGet, url, nil)
 	r.Header.Set("Authorization", "Bearer "+tc.apiKey)
 	w := httptest.NewRecorder()

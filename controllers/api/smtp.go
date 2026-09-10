@@ -18,7 +18,7 @@ func (as *Server) SendingProfiles(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
 		pp := parsePagination(r)
-		ss, total, err := models.GetSMTPs(ctx.Get(r, "user_id").(int64), pp)
+		ss, total, err := models.GetSMTPSummaries(ctx.Get(r, "user_id").(int64), pp)
 		if err != nil {
 			log.Error(err)
 		}
@@ -57,7 +57,7 @@ func (as *Server) SendingProfile(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
 	s, err := models.GetSMTP(id, ctx.Get(r, "user_id").(int64))
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "SMTP not found"}, http.StatusNotFound)
+		ErrorResponse(w, "SMTP not found", http.StatusNotFound)
 		return
 	}
 	switch {
@@ -69,7 +69,7 @@ func (as *Server) SendingProfile(w http.ResponseWriter, r *http.Request) {
 			ErrorResponse(w, "Error deleting SMTP", http.StatusInternalServerError)
 			return
 		}
-		JSONResponse(w, models.Response{Success: true, Message: "SMTP Deleted Successfully"}, http.StatusOK)
+		ActionResponse(w, "SMTP Deleted Successfully", http.StatusOK)
 	case r.Method == "PUT":
 		s = models.SMTP{}
 		err = json.NewDecoder(r.Body).Decode(&s)

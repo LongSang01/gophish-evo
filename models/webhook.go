@@ -15,6 +15,15 @@ type Webhook struct {
 	IsActive bool   `json:"is_active"`
 }
 
+// WebhookSummary is a lightweight representation of a Webhook for list views.
+// It excludes the Secret field.
+type WebhookSummary struct {
+	Id       int64  `json:"id"`
+	Name     string `json:"name"`
+	URL      string `json:"url"`
+	IsActive bool   `json:"is_active"`
+}
+
 // ErrURLNotSpecified indicates there was no URL specified
 var ErrURLNotSpecified = errors.New("URL can't be empty")
 
@@ -36,6 +45,31 @@ func GetWebhooks(pp PageParams) ([]Webhook, int64, error) {
 		query = query.Limit(pp.PageSize).Offset(pp.Offset())
 	}
 	err := query.Find(&whs).Error
+	if err != nil {
+		log.Error(err)
+		return whs, 0, err
+	}
+	if !pp.Valid() {
+		total = int64(len(whs))
+	}
+	return whs, total, nil
+}
+
+// GetWebhookSummaries returns lightweight webhook summaries for list views.
+func GetWebhookSummaries(pp PageParams) ([]WebhookSummary, int64, error) {
+	whs := []WebhookSummary{}
+	var total int64
+	if pp.Valid() {
+		if err := readDB().Table("webhooks").Count(&total).Error; err != nil {
+			log.Error(err)
+			return whs, 0, err
+		}
+	}
+	query := readDB().Table("webhooks").Select("id, name, url, is_active").Order("id DESC")
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
+	err := query.Scan(&whs).Error
 	if err != nil {
 		log.Error(err)
 		return whs, 0, err

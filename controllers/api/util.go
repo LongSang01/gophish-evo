@@ -9,8 +9,8 @@ import (
 	ctx "github.com/gophish/gophish/context"
 	log "github.com/gophish/gophish/logger"
 	"github.com/gophish/gophish/models"
-	"gorm.io/gorm"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 // DefaultPageSize is the default page size used for server-side pagination.
@@ -41,7 +41,7 @@ func parsePagination(r *http.Request) models.PageParams {
 
 // pagedJSONResponse writes a {total, data} wrapper for paginated responses.
 func pagedJSONResponse(w http.ResponseWriter, status int, pp models.PageParams, items interface{}, total int64) {
-	JSONResponse(w, models.PagedResponse{Total: total, Data: items}, status)
+	ListResponse(w, items, total, status)
 }
 
 // SendTestEmail sends a test email using the template name
@@ -52,12 +52,12 @@ func (as *Server) SendTestEmail(w http.ResponseWriter, r *http.Request) {
 		UserId:    ctx.Get(r, "user_id").(int64),
 	}
 	if r.Method != "POST" {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusBadRequest)
+		ErrorResponse(w, "Method not allowed", http.StatusBadRequest)
 		return
 	}
 	err := json.NewDecoder(r.Body).Decode(s)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Error decoding JSON Request"}, http.StatusBadRequest)
+		ErrorResponse(w, "Error decoding JSON Request", http.StatusBadRequest)
 		return
 	}
 
@@ -83,11 +83,11 @@ func (as *Server) SendTestEmail(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(logrus.Fields{
 				"template": s.Template.Name,
 			}).Error("Template does not exist")
-			JSONResponse(w, models.Response{Success: false, Message: models.ErrTemplateNotFound.Error()}, http.StatusBadRequest)
+			ErrorResponse(w, models.ErrTemplateNotFound.Error(), http.StatusBadRequest)
 			return
 		} else if err != nil {
 			log.Error(err)
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		s.TemplateId = s.Template.Id
@@ -102,11 +102,11 @@ func (as *Server) SendTestEmail(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(logrus.Fields{
 				"page": s.Page.Name,
 			}).Error("Page does not exist")
-			JSONResponse(w, models.Response{Success: false, Message: models.ErrPageNotFound.Error()}, http.StatusBadRequest)
+			ErrorResponse(w, models.ErrPageNotFound.Error(), http.StatusBadRequest)
 			return
 		} else if err != nil {
 			log.Error(err)
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		s.PageId = s.Page.Id
@@ -120,7 +120,7 @@ func (as *Server) SendTestEmail(w http.ResponseWriter, r *http.Request) {
 		// of caution and assume that the validation failure was more important.
 		if lookupErr != nil {
 			log.Error(err)
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		s.SMTP = smtp
@@ -130,7 +130,7 @@ func (as *Server) SendTestEmail(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		_, err = mail.ParseAddress(s.SMTP.FromAddress)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		} else {
 			s.FromAddress = s.SMTP.FromAddress
@@ -141,7 +141,7 @@ func (as *Server) SendTestEmail(w http.ResponseWriter, r *http.Request) {
 
 	// Validate the given request
 	if err = s.Validate(); err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
+		ErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -150,7 +150,7 @@ func (as *Server) SendTestEmail(w http.ResponseWriter, r *http.Request) {
 		err = models.PostEmailRequest(s)
 		if err != nil {
 			log.Error(err)
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
@@ -158,8 +158,8 @@ func (as *Server) SendTestEmail(w http.ResponseWriter, r *http.Request) {
 	err = as.worker.SendTestEmail(s)
 	if err != nil {
 		log.Error(err)
-		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+		ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	JSONResponse(w, models.Response{Success: true, Message: "Email Sent"}, http.StatusOK)
+	ActionResponse(w, "Email Sent", http.StatusOK)
 }

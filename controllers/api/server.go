@@ -84,7 +84,9 @@ func (as *Server) registerRoutes() {
 	protected.HandleFunc("/campaigns/summary", as.CampaignsSummary)
 	protected.HandleFunc("/campaigns/dashboard-stats", as.DashboardStats)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}", as.Campaign)
-	protected.HandleFunc("/campaigns/{id:[0-9]+}/results", as.CampaignResults)
+	// /campaigns/:id/results removed — metadata + paginated results are now
+	// returned by GET /campaigns/:id.  The /results/export and /events/export
+	// sub-routes are kept for CSV/JSON export functionality.
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/results/export", as.CampaignResultsExport)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/events/export", as.CampaignEventsExport)
 	protected.HandleFunc("/campaigns/{id:[0-9]+}/summary", as.CampaignSummary)

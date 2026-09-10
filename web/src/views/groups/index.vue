@@ -22,7 +22,7 @@
             <a-tag color="cyan">{{ record.name }}</a-tag>
           </template>
           <template v-if="column.key === 'num_targets'">
-            <a-tag :color="targetCountColor(record.targets?.length || 0)">{{ record.targets ? record.targets.length : 0 }}</a-tag>
+            <a-tag :color="targetCountColor(record.num_targets || 0)">{{ record.num_targets || 0 }}</a-tag>
           </template>
           <template v-if="column.key === 'modified_date'">
             {{ formatDate(record.modified_date) }}
@@ -113,7 +113,7 @@ import {
 } from '@ant-design/icons-vue';
 
 let targetUid = 0;
-import { getGroups, createGroup, updateGroup, deleteGroup, importGroup } from '@/api/groups';
+import { getGroups, getGroup, createGroup, updateGroup, deleteGroup, importGroup } from '@/api/groups';
 import { formatDate } from '@/utils/format';
 
 const loading = ref(false);
@@ -190,22 +190,32 @@ function assignUids(targets: any[]) {
   return targets;
 }
 
-function showEditModal(group: any) {
-  editingGroup.value = group;
-  formData.value = {
-    name: group.name,
-    targets: group.targets ? assignUids([...group.targets]) : [],
-  };
-  modalVisible.value = true;
+async function showEditModal(group: any) {
+  try {
+    const full = await getGroup(group.id);
+    editingGroup.value = full;
+    formData.value = {
+      name: full.name,
+      targets: full.targets ? assignUids([...full.targets]) : [],
+    };
+    modalVisible.value = true;
+  } catch {
+    message.error('加载用户组详情失败');
+  }
 }
 
-function handleDuplicate(group: any) {
-  editingGroup.value = null;
-  formData.value = {
-    name: `${group.name} (副本)`,
-    targets: group.targets ? assignUids([...group.targets]) : [],
-  };
-  modalVisible.value = true;
+async function handleDuplicate(group: any) {
+  try {
+    const full = await getGroup(group.id);
+    editingGroup.value = null;
+    formData.value = {
+      name: `${full.name} (副本)`,
+      targets: full.targets ? assignUids([...full.targets]) : [],
+    };
+    modalVisible.value = true;
+  } catch {
+    message.error('加载用户组详情失败');
+  }
 }
 
 function addTarget() {

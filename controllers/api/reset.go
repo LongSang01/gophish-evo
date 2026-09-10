@@ -18,7 +18,7 @@ func (as *Server) Reset(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			ErrorResponse(w, "Error setting API Key", http.StatusInternalServerError)
 		} else {
-			JSONResponse(w, models.Response{Success: true, Message: "API Key successfully reset!", Data: u.ApiKey}, http.StatusOK)
+			SuccessResponse(w, u.ApiKey, http.StatusOK)
 		}
 	}
 }

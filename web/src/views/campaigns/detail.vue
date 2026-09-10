@@ -504,7 +504,7 @@ import {
 import * as echarts from "echarts";
 import {
   getCampaign,
-  getCampaignResults,
+  getCampaignSummary,
   completeCampaign,
   launchCampaign,
   getClientCode,
@@ -596,7 +596,6 @@ onMounted(async () => {
   const id = Number(route.params.id);
   await loadCampaign(id);
   if (campaign.value.source_type === "email") {
-    await loadResults(id);
     initChart();
   } else {
     await loadReports(id);
@@ -604,29 +603,30 @@ onMounted(async () => {
 });
 
 async function loadCampaign(id: number) {
-  try {
-    const data = await getCampaign(id);
-    campaign.value = data;
-    allTimeline.value = data.timeline || [];
-    if (data.source_type === "client" || data.source_type === "page") {
-      buildReportColumns();
-    }
-  } catch (error) {
-    message.error("加载活动详情失败");
-  }
-}
-
-async function loadResults(id: number) {
   loadingResults.value = true;
   try {
-    const data = await getCampaignResults(id, {
+    const data = await getCampaign(id, {
       pageNum: pagination.current,
       pageSize: pagination.pageSize,
     });
+    campaign.value = data;
+    allTimeline.value = data.timeline || [];
+    // Merged response: also contains paginated results
     results.value = data.results || [];
     pagination.total = data.total || 0;
+    if (data.source_type === "client" || data.source_type === "page") {
+      buildReportColumns();
+    }
+    // Load stats from the separate summary endpoint
+    try {
+      const summary = await getCampaignSummary(id);
+      campaign.value.stats = summary.stats || {};
+      campaign.value.status = summary.status || data.status;
+    } catch {
+      // stats are optional; campaign detail still renders without them
+    }
   } catch (error) {
-    message.error("加载结果失败");
+    message.error("加载活动详情失败");
   } finally {
     loadingResults.value = false;
   }
@@ -635,7 +635,7 @@ async function loadResults(id: number) {
 function handleTableChange(pag: any) {
   pagination.current = pag.current;
   pagination.pageSize = pag.pageSize;
-  loadResults(Number(route.params.id));
+  loadCampaign(Number(route.params.id));
 }
 
 function buildReportColumns() {

@@ -18,7 +18,7 @@ func (as *Server) Templates(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
 		pp := parsePagination(r)
-		ts, total, err := models.GetTemplates(ctx.Get(r, "user_id").(int64), pp)
+		ts, total, err := models.GetTemplateSummaries(ctx.Get(r, "user_id").(int64), pp)
 		if err != nil {
 			log.Error(err)
 		}
@@ -63,7 +63,7 @@ func (as *Server) Template(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
 	t, err := models.GetTemplate(id, ctx.Get(r, "user_id").(int64))
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Template not found"}, http.StatusNotFound)
+		ErrorResponse(w, "Template not found", http.StatusNotFound)
 		return
 	}
 	switch {
@@ -75,7 +75,7 @@ func (as *Server) Template(w http.ResponseWriter, r *http.Request) {
 			ErrorResponse(w, "Error deleting template", http.StatusInternalServerError)
 			return
 		}
-		JSONResponse(w, models.Response{Success: true, Message: "Template deleted successfully!"}, http.StatusOK)
+		ActionResponse(w, "Template deleted successfully!", http.StatusOK)
 	case r.Method == "PUT":
 		t = models.Template{}
 		err = json.NewDecoder(r.Body).Decode(&t)

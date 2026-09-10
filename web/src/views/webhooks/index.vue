@@ -61,7 +61,7 @@
 import { ref, reactive, onMounted } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import { PlusOutlined } from '@ant-design/icons-vue';
-import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, validateWebhook } from '@/api/webhooks';
+import { getWebhooks, getWebhook, createWebhook, updateWebhook, deleteWebhook, validateWebhook } from '@/api/webhooks';
 
 const loading = ref(false);
 const saving = ref(false);
@@ -130,15 +130,20 @@ function showCreateModal() {
   modalVisible.value = true;
 }
 
-function showEditModal(webhook: any) {
-  editingWebhook.value = webhook;
-  formData.value = {
-    name: webhook.name,
-    url: webhook.url,
-    secret: webhook.secret || '',
-    is_active: webhook.is_active !== false,
-  };
-  modalVisible.value = true;
+async function showEditModal(webhook: any) {
+  try {
+    const full = await getWebhook(webhook.id);
+    editingWebhook.value = full;
+    formData.value = {
+      name: full.name,
+      url: full.url,
+      secret: full.secret || '',
+      is_active: full.is_active !== false,
+    };
+    modalVisible.value = true;
+  } catch {
+    message.error('加载Webhook详情失败');
+  }
 }
 
 async function handleSave() {

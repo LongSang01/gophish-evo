@@ -129,7 +129,7 @@ import { PlusOutlined, ImportOutlined } from '@ant-design/icons-vue';
 import { Codemirror } from 'vue-codemirror';
 import { html } from '@codemirror/lang-html';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { getPages, createPage, updatePage, deletePage, importSite } from '@/api/pages';
+import { getPages, getPage, createPage, updatePage, deletePage, importSite } from '@/api/pages';
 import { formatDate } from '@/utils/format';
 
 const loading = ref(false);
@@ -213,28 +213,38 @@ function showCreateModal() {
   modalVisible.value = true;
 }
 
-function showEditModal(page: any) {
-  editingPage.value = page;
-  formData.value = {
-    name: page.name,
-    html: page.html || '',
-    capture_credentials: page.capture_credentials || false,
-    capture_passwords: page.capture_passwords || false,
-    redirect_url: page.redirect_url || '',
-  };
-  modalVisible.value = true;
+async function showEditModal(page: any) {
+  try {
+    const full = await getPage(page.id);
+    editingPage.value = full;
+    formData.value = {
+      name: full.name,
+      html: full.html || '',
+      capture_credentials: full.capture_credentials || false,
+      capture_passwords: full.capture_passwords || false,
+      redirect_url: full.redirect_url || '',
+    };
+    modalVisible.value = true;
+  } catch {
+    message.error('加载落地页详情失败');
+  }
 }
 
-function handleDuplicate(page: any) {
-  editingPage.value = null;
-  formData.value = {
-    name: `${page.name} (副本)`,
-    html: page.html || '',
-    capture_credentials: page.capture_credentials || false,
-    capture_passwords: page.capture_passwords || false,
-    redirect_url: page.redirect_url || '',
-  };
-  modalVisible.value = true;
+async function handleDuplicate(page: any) {
+  try {
+    const full = await getPage(page.id);
+    editingPage.value = null;
+    formData.value = {
+      name: `${full.name} (副本)`,
+      html: full.html || '',
+      capture_credentials: full.capture_credentials || false,
+      capture_passwords: full.capture_passwords || false,
+      redirect_url: full.redirect_url || '',
+    };
+    modalVisible.value = true;
+  } catch {
+    message.error('加载落地页详情失败');
+  }
 }
 
 async function handleSave() {

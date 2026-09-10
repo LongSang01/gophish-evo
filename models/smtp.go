@@ -53,6 +53,16 @@ type Header struct {
 	Value  string `json:"value"`
 }
 
+// SMTPSummary is a lightweight representation of an SMTP profile for list views.
+// It excludes sensitive fields like Username, Password, and Headers.
+type SMTPSummary struct {
+	Id           int64     `json:"id"`
+	Name         string    `json:"name"`
+	Host         string    `json:"host"`
+	FromAddress  string    `json:"from_address"`
+	ModifiedDate time.Time `json:"modified_date"`
+}
+
 // ErrFromAddressNotSpecified is thrown when there is no "From" address
 // specified in the SMTP configuration
 var ErrFromAddressNotSpecified = errors.New("No From Address specified")
@@ -162,6 +172,31 @@ func GetSMTPs(uid int64, pp PageParams) ([]SMTP, int64, error) {
 			log.Error(err)
 			return ss, 0, err
 		}
+	}
+	if !pp.Valid() {
+		total = int64(len(ss))
+	}
+	return ss, total, nil
+}
+
+// GetSMTPSummaries returns lightweight SMTP summaries for list views.
+func GetSMTPSummaries(uid int64, pp PageParams) ([]SMTPSummary, int64, error) {
+	ss := []SMTPSummary{}
+	var total int64
+	if pp.Valid() {
+		if err := readDB().Table("smtp").Where("user_id=?", uid).Count(&total).Error; err != nil {
+			log.Error(err)
+			return ss, 0, err
+		}
+	}
+	query := readDB().Table("smtp").Select("id, name, host, from_address, modified_date").Where("user_id=?", uid).Order("modified_date DESC")
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
+	err := query.Scan(&ss).Error
+	if err != nil {
+		log.Error(err)
+		return ss, 0, err
 	}
 	if !pp.Valid() {
 		total = int64(len(ss))

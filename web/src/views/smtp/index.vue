@@ -115,7 +115,7 @@ import { message, Modal } from 'ant-design-vue';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons-vue';
 
 let headerUid = 0;
-import { getSMTPProfiles, createSMTPProfile, updateSMTPProfile, deleteSMTPProfile, sendTestEmail } from '@/api/smtp';
+import { getSMTPProfiles, getSMTPProfile, createSMTPProfile, updateSMTPProfile, deleteSMTPProfile, sendTestEmail } from '@/api/smtp';
 import { formatDate } from '@/utils/format';
 
 const loading = ref(false);
@@ -208,32 +208,42 @@ function assignHeaderUids(headers: any[]) {
   return headers;
 }
 
-function showEditModal(profile: any) {
-  editingProfile.value = profile;
-  formData.value = {
-    name: profile.name,
-    host: profile.host,
-    username: profile.username || '',
-    password: profile.password || '',
-    from_address: profile.from_address || '',
-    ignore_cert_errors: profile.ignore_cert_errors || false,
-    headers: profile.headers ? assignHeaderUids(profile.headers.map((h: any) => ({ ...h }))) : [],
-  };
-  modalVisible.value = true;
+async function showEditModal(profile: any) {
+  try {
+    const full = await getSMTPProfile(profile.id);
+    editingProfile.value = full;
+    formData.value = {
+      name: full.name,
+      host: full.host,
+      username: full.username || '',
+      password: full.password || '',
+      from_address: full.from_address || '',
+      ignore_cert_errors: full.ignore_cert_errors || false,
+      headers: full.headers ? assignHeaderUids(full.headers.map((h: any) => ({ ...h }))) : [],
+    };
+    modalVisible.value = true;
+  } catch {
+    message.error('加载发送配置详情失败');
+  }
 }
 
-function handleDuplicate(profile: any) {
-  editingProfile.value = null;
-  formData.value = {
-    name: `${profile.name} - 副本`,
-    host: profile.host,
-    username: profile.username || '',
-    password: profile.password || '',
-    from_address: profile.from_address || '',
-    ignore_cert_errors: profile.ignore_cert_errors || false,
-    headers: profile.headers ? assignHeaderUids(profile.headers.map((h: any) => ({ ...h }))) : [],
-  };
-  modalVisible.value = true;
+async function handleDuplicate(profile: any) {
+  try {
+    const full = await getSMTPProfile(profile.id);
+    editingProfile.value = null;
+    formData.value = {
+      name: `${full.name} - 副本`,
+      host: full.host,
+      username: full.username || '',
+      password: full.password || '',
+      from_address: full.from_address || '',
+      ignore_cert_errors: full.ignore_cert_errors || false,
+      headers: full.headers ? assignHeaderUids(full.headers.map((h: any) => ({ ...h }))) : [],
+    };
+    modalVisible.value = true;
+  } catch {
+    message.error('加载发送配置详情失败');
+  }
 }
 
 function addCustomHeader() {

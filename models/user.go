@@ -10,6 +10,44 @@ import (
 // ErrModifyingOnlyAdmin occurs when there is an attempt to modify the only
 // user account with the Admin role in such a way that there will be no user
 // accounts left in Gophish with that role.
+
+// UserSummary is a lightweight representation of a User for list views.
+// It excludes sensitive fields like Hash and ApiKey.
+type UserSummary struct {
+	Id                     int64     `json:"id"`
+	Username               string    `json:"username"`
+	Role                   Role      `json:"role" gorm:"foreignKey:RoleID"`
+	RoleID                 int64     `json:"-"`
+	PasswordChangeRequired bool      `json:"password_change_required"`
+	AccountLocked          bool      `json:"account_locked"`
+	LastLogin              time.Time `json:"last_login"`
+}
+
+// GetUserSummaries returns lightweight user summaries for list views.
+func GetUserSummaries(pp PageParams) ([]UserSummary, int64, error) {
+	us := []UserSummary{}
+	var total int64
+	if pp.Valid() {
+		if err := readDB().Table("users").Count(&total).Error; err != nil {
+			log.Error(err)
+			return us, 0, err
+		}
+	}
+	query := readDB().Table("users").Preload("Role").Select("id, username, role_id, password_change_required, account_locked, last_login").Order("id DESC")
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
+	err := query.Find(&us).Error
+	if err != nil {
+		log.Error(err)
+		return us, 0, err
+	}
+	if !pp.Valid() {
+		total = int64(len(us))
+	}
+	return us, total, nil
+}
+
 var ErrModifyingOnlyAdmin = errors.New("Cannot remove the only administrator")
 
 // User represents the user model for gophish.

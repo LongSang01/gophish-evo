@@ -57,7 +57,7 @@ func (as *Server) CampaignsSummary(w http.ResponseWriter, r *http.Request) {
 		cs, err := models.GetCampaignSummaries(ctx.Get(r, "user_id").(int64), pp)
 		if err != nil {
 			log.Error(err)
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		ListResponse(w, cs.Campaigns, cs.Total, http.StatusOK)
@@ -68,13 +68,13 @@ func (as *Server) CampaignsSummary(w http.ResponseWriter, r *http.Request) {
 // avoiding the N+1 query problem of loading all campaign details.
 func (as *Server) DashboardStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	resp, err := models.GetDashboardStats(ctx.Get(r, "user_id").(int64))
 	if err != nil {
 		log.Error(err)
-		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+		ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	SuccessResponse(w, resp, http.StatusOK)
@@ -82,50 +82,38 @@ func (as *Server) DashboardStats(w http.ResponseWriter, r *http.Request) {
 
 // Campaign returns details about the requested campaign. If the campaign is not
 // valid, APICampaign returns null.
+//
+// GET returns campaign metadata and paginated results (merged from the former
+// /campaigns/:id/results endpoint). The /campaigns/:id/summary endpoint can be
+// used separately for stats and chart data.
 func (as *Server) Campaign(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
-	c, err := models.GetCampaign(id, ctx.Get(r, "user_id").(int64))
-	if err != nil {
-		log.Error(err)
-		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
-		return
-	}
+	uid := ctx.Get(r, "user_id").(int64)
 	switch {
 	case r.Method == "GET":
-		SuccessResponse(w, c, http.StatusOK)
+		pp := parsePagination(r)
+		cr, err := models.GetCampaignResults(id, uid, pp)
+		if err != nil {
+			log.Error(err)
+			ErrorResponse(w, "Campaign not found", http.StatusNotFound)
+			return
+		}
+		SuccessResponse(w, cr, http.StatusOK)
 	case r.Method == "DELETE":
-		err = models.DeleteCampaign(id)
+		err := models.DeleteCampaign(id)
 		if err != nil {
 			ErrorResponse(w, "Error deleting campaign", http.StatusInternalServerError)
 			return
 		}
-		JSONResponse(w, models.Response{Success: true, Message: "Campaign deleted successfully!"}, http.StatusOK)
-	}
-}
-
-// CampaignResults returns just the results for a given campaign to
-// significantly reduce the information returned.
-func (as *Server) CampaignResults(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, _ := strconv.ParseInt(vars["id"], 0, 64)
-	pp := parsePagination(r)
-	cr, err := models.GetCampaignResults(id, ctx.Get(r, "user_id").(int64), pp)
-	if err != nil {
-		log.Error(err)
-		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
-		return
-	}
-	if r.Method == "GET" {
-		SuccessResponse(w, cr, http.StatusOK)
-		return
+		ActionResponse(w, "Campaign deleted successfully!", http.StatusOK)
 	}
 }
 
 // CampaignResultsExport downloads the campaign results as a CSV file.
 func (as *Server) CampaignResultsExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	vars := mux.Vars(r)
@@ -133,7 +121,7 @@ func (as *Server) CampaignResultsExport(w http.ResponseWriter, r *http.Request) 
 	cr, err := models.GetCampaignResults(id, ctx.Get(r, "user_id").(int64), models.PageParams{})
 	if err != nil {
 		log.Error(err)
-		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+		ErrorResponse(w, "Campaign not found", http.StatusNotFound)
 		return
 	}
 	fixedKeys := []string{"id", "smtp_id", "status", "ip", "latitude", "longitude", "send_date", "reported", "modified_date", "smtp_from_address", "email", "full_name", "position"}
@@ -215,7 +203,7 @@ func resultMap(res *models.Result) (map[string]interface{}, error) {
 // CampaignEventsExport downloads the campaign timeline events as a CSV file.
 func (as *Server) CampaignEventsExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	vars := mux.Vars(r)
@@ -223,7 +211,7 @@ func (as *Server) CampaignEventsExport(w http.ResponseWriter, r *http.Request) {
 	cr, err := models.GetCampaignResults(id, ctx.Get(r, "user_id").(int64), models.PageParams{})
 	if err != nil {
 		log.Error(err)
-		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+		ErrorResponse(w, "Campaign not found", http.StatusNotFound)
 		return
 	}
 	events := cr.AllEvents()
@@ -245,9 +233,9 @@ func (as *Server) CampaignSummary(w http.ResponseWriter, r *http.Request) {
 		cs, err := models.GetCampaignSummary(id, ctx.Get(r, "user_id").(int64))
 		if err != nil {
 			if err == gorm.ErrRecordNotFound {
-				JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+				ErrorResponse(w, "Campaign not found", http.StatusNotFound)
 			} else {
-				JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+				ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			}
 			log.Error(err)
 			return
@@ -265,17 +253,17 @@ func (as *Server) CampaignComplete(w http.ResponseWriter, r *http.Request) {
 	case r.Method == "GET":
 		err := models.CompleteCampaign(id, ctx.Get(r, "user_id").(int64))
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: "Error completing campaign"}, http.StatusInternalServerError)
+			ErrorResponse(w, "Error completing campaign", http.StatusInternalServerError)
 			return
 		}
-		JSONResponse(w, models.Response{Success: true, Message: "Campaign completed successfully!"}, http.StatusOK)
+		ActionResponse(w, "Campaign completed successfully!", http.StatusOK)
 	}
 }
 
 // CampaignLaunch launches a scheduled or queued campaign immediately.
 func (as *Server) CampaignLaunch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	vars := mux.Vars(r)
@@ -283,23 +271,23 @@ func (as *Server) CampaignLaunch(w http.ResponseWriter, r *http.Request) {
 	uid := ctx.Get(r, "user_id").(int64)
 	c, err := models.GetCampaign(id, uid)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+		ErrorResponse(w, "Campaign not found", http.StatusNotFound)
 		return
 	}
 	if c.SourceType != models.SourceTypeEmail {
-		JSONResponse(w, models.Response{Success: false, Message: "Only email campaigns can be launched"}, http.StatusBadRequest)
+		ErrorResponse(w, "Only email campaigns can be launched", http.StatusBadRequest)
 		return
 	}
 	if c.Status != models.CampaignScheduled && c.Status != models.CampaignQueued {
-		JSONResponse(w, models.Response{Success: false, Message: "Campaign is not in a launchable state"}, http.StatusBadRequest)
+		ErrorResponse(w, "Campaign is not in a launchable state", http.StatusBadRequest)
 		return
 	}
 	err = models.LaunchCampaign(id, uid)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+		ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	// Launch via worker
 	go as.worker.LaunchCampaign(c)
-	JSONResponse(w, models.Response{Success: true, Message: "Campaign launched successfully!"}, http.StatusOK)
+	ActionResponse(w, "Campaign launched successfully!", http.StatusOK)
 }

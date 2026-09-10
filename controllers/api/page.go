@@ -18,7 +18,7 @@ func (as *Server) Pages(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
 		pp := parsePagination(r)
-		ps, total, err := models.GetPages(ctx.Get(r, "user_id").(int64), pp)
+		ps, total, err := models.GetPageSummaries(ctx.Get(r, "user_id").(int64), pp)
 		if err != nil {
 			log.Error(err)
 		}
@@ -57,7 +57,7 @@ func (as *Server) Page(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
 	p, err := models.GetPage(id, ctx.Get(r, "user_id").(int64))
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Page not found"}, http.StatusNotFound)
+		ErrorResponse(w, "Page not found", http.StatusNotFound)
 		return
 	}
 	switch {
@@ -69,7 +69,7 @@ func (as *Server) Page(w http.ResponseWriter, r *http.Request) {
 			ErrorResponse(w, "Error deleting page", http.StatusInternalServerError)
 			return
 		}
-		JSONResponse(w, models.Response{Success: true, Message: "Page Deleted Successfully"}, http.StatusOK)
+		ActionResponse(w, "Page Deleted Successfully", http.StatusOK)
 	case r.Method == "PUT":
 		p = models.Page{}
 		err = json.NewDecoder(r.Body).Decode(&p)

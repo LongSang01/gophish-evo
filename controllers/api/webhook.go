@@ -16,10 +16,10 @@ func (as *Server) Webhooks(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
 		pp := parsePagination(r)
-		whs, total, err := models.GetWebhooks(pp)
+		whs, total, err := models.GetWebhookSummaries(pp)
 		if err != nil {
 			log.Error(err)
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		ListResponse(w, whs, total, http.StatusOK)
@@ -46,7 +46,7 @@ func (as *Server) Webhook(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
 	wh, err := models.GetWebhook(id)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Webhook not found"}, http.StatusNotFound)
+		ErrorResponse(w, "Webhook not found", http.StatusNotFound)
 		return
 	}
 	switch {
@@ -60,7 +60,7 @@ func (as *Server) Webhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Infof("Deleted webhook with id: %d", id)
-		JSONResponse(w, models.Response{Success: true, Message: "Webhook deleted Successfully!"}, http.StatusOK)
+		ActionResponse(w, "Webhook deleted Successfully!", http.StatusOK)
 
 	case r.Method == "PUT":
 		wh = models.Webhook{}
@@ -92,7 +92,7 @@ func (as *Server) ValidateWebhook(w http.ResponseWriter, r *http.Request) {
 		wh, err := models.GetWebhook(id)
 		if err != nil {
 			log.Error(err)
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		payload := validationEvent{Success: true}

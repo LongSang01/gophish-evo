@@ -21,6 +21,17 @@ type Page struct {
 	ModifiedDate       time.Time `json:"modified_date"`
 }
 
+// PageSummary is a lightweight representation of a Page for list views.
+// It excludes the heavy HTML field.
+type PageSummary struct {
+	Id                 int64     `json:"id"`
+	Name               string    `json:"name"`
+	CaptureCredentials bool      `json:"capture_credentials"`
+	CapturePasswords   bool      `json:"capture_passwords"`
+	RedirectURL        string    `json:"redirect_url"`
+	ModifiedDate       time.Time `json:"modified_date"`
+}
+
 // ErrPageNameNotSpecified is thrown if the name of the landing page is blank.
 var ErrPageNameNotSpecified = errors.New("Page Name not specified")
 
@@ -103,6 +114,31 @@ func GetPages(uid int64, pp PageParams) ([]Page, int64, error) {
 		query = query.Limit(pp.PageSize).Offset(pp.Offset())
 	}
 	err := query.Find(&ps).Error
+	if err != nil {
+		log.Error(err)
+		return ps, 0, err
+	}
+	if !pp.Valid() {
+		total = int64(len(ps))
+	}
+	return ps, total, nil
+}
+
+// GetPageSummaries returns lightweight page summaries for list views.
+func GetPageSummaries(uid int64, pp PageParams) ([]PageSummary, int64, error) {
+	ps := []PageSummary{}
+	var total int64
+	if pp.Valid() {
+		if err := readDB().Table("pages").Where("user_id=?", uid).Count(&total).Error; err != nil {
+			log.Error(err)
+			return ps, 0, err
+		}
+	}
+	query := readDB().Table("pages").Select("id, name, capture_credentials, capture_passwords, redirect_url, modified_date").Where("user_id=?", uid).Order("modified_date DESC")
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
+	err := query.Scan(&ps).Error
 	if err != nil {
 		log.Error(err)
 		return ps, 0, err

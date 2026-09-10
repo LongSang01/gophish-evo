@@ -22,8 +22,11 @@ export function getDashboardStats(): Promise<any> {
   return defHttp.get({ url: `${Api.Campaigns}/dashboard-stats` });
 }
 
-export function getCampaign(id: number): Promise<any> {
-  return defHttp.get({ url: `${Api.Campaigns}/${id}` });
+export function getCampaign(
+  id: number,
+  params?: { pageNum?: number; pageSize?: number },
+): Promise<any> {
+  return defHttp.get({ url: `${Api.Campaigns}/${id}`, params });
 }
 
 export function createCampaign(data: any): Promise<any> {
@@ -44,13 +47,6 @@ export function launchCampaign(id: number): Promise<void> {
 
 export function getCampaignSummary(id: number): Promise<any> {
   return defHttp.get({ url: `${Api.Campaigns}/${id}/summary` });
-}
-
-export function getCampaignResults(
-  id: number,
-  params?: { pageNum?: number; pageSize?: number },
-): Promise<any> {
-  return defHttp.get({ url: `${Api.Campaigns}/${id}/results`, params });
 }
 
 export function getClientCode(id: number): Promise<any> {

@@ -69,7 +69,7 @@ func (as *Server) Users(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
 		pp := parsePagination(r)
-		us, total, err := models.GetUsers(pp)
+		us, total, err := models.GetUserSummaries(pp)
 		if err != nil {
 			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -133,16 +133,16 @@ func (as *Server) User(w http.ResponseWriter, r *http.Request) {
 	currentUser := ctx.Get(r, "user").(models.User)
 	hasSystem, err := currentUser.HasPermission(models.PermissionModifySystem)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+		ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if !hasSystem && currentUser.Id != id {
-		JSONResponse(w, models.Response{Success: false, Message: http.StatusText(http.StatusForbidden)}, http.StatusForbidden)
+		ErrorResponse(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 		return
 	}
 	existingUser, err := models.GetUser(id)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "User not found"}, http.StatusNotFound)
+		ErrorResponse(w, "User not found", http.StatusNotFound)
 		return
 	}
 	switch {
@@ -155,7 +155,7 @@ func (as *Server) User(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Infof("Deleted user account for %s", existingUser.Username)
-		JSONResponse(w, models.Response{Success: true, Message: "User deleted Successfully!"}, http.StatusOK)
+		ActionResponse(w, "User deleted Successfully!", http.StatusOK)
 	case r.Method == "PUT":
 		ur := &userRequest{}
 		err = json.NewDecoder(r.Body).Decode(ur)
@@ -188,7 +188,7 @@ func (as *Server) User(w http.ResponseWriter, r *http.Request) {
 		if existingUser.Role.Slug == models.RoleAdmin && existingUser.Role.ID != role.ID {
 			err = models.EnsureEnoughAdmins()
 			if err != nil {
-				JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+				ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 		}

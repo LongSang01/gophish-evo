@@ -14,12 +14,12 @@ import (
 func (as *Server) IMAPServerValidate(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
-		JSONResponse(w, models.Response{Success: false, Message: "Only POSTs allowed"}, http.StatusBadRequest)
+		ErrorResponse(w, "Only POSTs allowed", http.StatusBadRequest)
 	case r.Method == "POST":
 		im := models.IMAP{}
 		err := json.NewDecoder(r.Body).Decode(&im)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: "Invalid request"}, http.StatusBadRequest)
+			ErrorResponse(w, "Invalid request", http.StatusBadRequest)
 			return
 		}
 		err = imap.Validate(&im)
@@ -27,7 +27,7 @@ func (as *Server) IMAPServerValidate(w http.ResponseWriter, r *http.Request) {
 			ErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		JSONResponse(w, models.Response{Success: true, Message: "Successful login."}, http.StatusCreated)
+		ActionResponse(w, "Successful login.", http.StatusCreated)
 	}
 }
 
@@ -37,7 +37,7 @@ func (as *Server) IMAPServer(w http.ResponseWriter, r *http.Request) {
 	case r.Method == "GET":
 		ss, err := models.GetIMAP(ctx.Get(r, "user_id").(int64))
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		SuccessResponse(w, ss, http.StatusOK)
@@ -47,16 +47,16 @@ func (as *Server) IMAPServer(w http.ResponseWriter, r *http.Request) {
 		im := models.IMAP{}
 		err := json.NewDecoder(r.Body).Decode(&im)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: "Invalid data. Please check your IMAP settings."}, http.StatusBadRequest)
+			ErrorResponse(w, "Invalid data. Please check your IMAP settings.", http.StatusBadRequest)
 			return
 		}
 		im.ModifiedDate = time.Now().UTC()
 		im.UserId = ctx.Get(r, "user_id").(int64)
 		err = models.PostIMAP(&im, ctx.Get(r, "user_id").(int64))
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		JSONResponse(w, models.Response{Success: true, Message: "Successfully saved IMAP settings."}, http.StatusCreated)
+		ActionResponse(w, "Successfully saved IMAP settings.", http.StatusCreated)
 	}
 }

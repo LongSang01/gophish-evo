@@ -39,15 +39,33 @@ type Campaign struct {
 	ReportConfigJSON string        `json:"-" gorm:"column:report_config_json"`
 }
 
-// CampaignResults is a struct representing the results from a campaign
+// CampaignResults is a struct representing the results from a campaign.
+// It includes campaign metadata so that GET /campaigns/:id can serve both
+// the campaign detail and paginated results in a single response.
 type CampaignResults struct {
-	Id           int64    `json:"id"`
-	Name         string   `json:"name"`
-	Status       string   `json:"status"`
-	Total        int64    `json:"total" gorm:"-"`
-	Results      []Result `json:"results,omitempty" gorm:"-"`
-	OrphanEvents []Event  `json:"-" gorm:"-"` // events without a matching result (e.g. "Campaign Created")
-	SMTPs        []SMTP   `json:"smtps,omitempty" gorm:"-"`
+	Id            int64         `json:"id"`
+	Name          string        `json:"name"`
+	Status        string        `json:"status"`
+	SourceType    string        `json:"source_type"`
+	CreatedDate   time.Time     `json:"created_date"`
+	LaunchDate    time.Time     `json:"launch_date"`
+	SendByDate    time.Time     `json:"send_by_date"`
+	CompletedDate time.Time     `json:"completed_date"`
+	URL           string        `json:"url"`
+	Template      Template      `json:"template" gorm:"-"`
+	Groups        []Group       `json:"groups,omitempty" gorm:"-"`
+	Page          Page          `json:"page" gorm:"-"`
+	ReportConfig  *ReportConfig `json:"report_config,omitempty" gorm:"-"`
+	Total         int64         `json:"total" gorm:"-"`
+	Results       []Result      `json:"results,omitempty" gorm:"-"`
+	OrphanEvents  []Event       `json:"-" gorm:"-"` // events without a matching result (e.g. "Campaign Created")
+	SMTPs         []SMTP        `json:"smtps,omitempty" gorm:"-"`
+	// Internal fields loaded from DB for fetching related records
+	TemplateId       int64  `json:"-" gorm:"column:template_id"`
+	PageId           int64  `json:"-" gorm:"column:page_id"`
+	SmtpId           int64  `json:"-" gorm:"column:smtp_id"`
+	ReportSalt       string `json:"-" gorm:"column:report_salt"`
+	ReportConfigJSON string `json:"-" gorm:"column:report_config_json"`
 }
 
 // CampaignSummaries is a struct representing the overview of campaigns
@@ -723,7 +741,9 @@ func GetCampaign(id int64, uid int64) (Campaign, error) {
 }
 
 // GetCampaignResults returns a paginated page of campaign results for the
-// given campaign.
+// given campaign, together with campaign metadata (template, groups, SMTPs,
+// page, report config) so that the client can render the detail view without
+// a separate request.
 func GetCampaignResults(id int64, uid int64, pp PageParams) (CampaignResults, error) {
 	cr := CampaignResults{}
 	err := readDB().Table("campaigns").Where("id=? and user_id=?", id, uid).First(&cr).Error
@@ -780,6 +800,33 @@ func GetCampaignResults(id int64, uid int64, pp PageParams) (CampaignResults, er
 	for i := range cr.Results {
 		if addr, ok := smtpMap[cr.Results[i].SMTPId]; ok {
 			cr.Results[i].SMTPFromAddress = addr
+		}
+	}
+	// Load related template (lightweight: id, name only)
+	if cr.TemplateId != 0 {
+		err = readDB().Table("templates").Select("id, name").Where("id=? and user_id=?", cr.TemplateId, uid).First(&cr.Template).Error
+		if err != nil && err != gorm.ErrRecordNotFound {
+			log.Warnf("%s: template not found for campaign", err)
+			cr.Template = Template{Name: "[Deleted]"}
+		}
+	}
+	// Load related page (lightweight: id, name only)
+	if cr.PageId != 0 {
+		err = readDB().Table("pages").Select("id, user_id, name").Where("id=? and user_id=?", cr.PageId, uid).First(&cr.Page).Error
+		if err != nil && err != gorm.ErrRecordNotFound {
+			log.Warnf("%s: page not found for campaign", err)
+			cr.Page = Page{Name: "[Deleted]"}
+		}
+	}
+	// Load report config for client/page type campaigns
+	if cr.SourceType == SourceTypeClient || cr.SourceType == SourceTypePage {
+		// Build a minimal Campaign pointer for GetCampaignReportConfig
+		tmp := &Campaign{Id: cr.Id, SourceType: cr.SourceType, ReportSalt: cr.ReportSalt, ReportConfigJSON: cr.ReportConfigJSON}
+		rc, err := GetCampaignReportConfig(tmp)
+		if err != nil {
+			log.Warn(err)
+		} else {
+			cr.ReportConfig = rc
 		}
 	}
 	return cr, nil

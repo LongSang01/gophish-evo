@@ -19,12 +19,12 @@ func (as *Server) Groups(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
 		pp := parsePagination(r)
-		gs, total, err := models.GetGroups(ctx.Get(r, "user_id").(int64), pp)
+		gs, err := models.GetGroupSummaries(ctx.Get(r, "user_id").(int64), pp)
 		if err != nil {
-			JSONResponse(w, models.Response{Success: false, Message: "No groups found"}, http.StatusNotFound)
+			ErrorResponse(w, "No groups found", http.StatusNotFound)
 			return
 		}
-		ListResponse(w, gs, total, http.StatusOK)
+		ListResponse(w, gs.Groups, gs.Total, http.StatusOK)
 	//POST: Create a new group and return it as JSON
 	case r.Method == "POST":
 		g := models.Group{}
@@ -54,10 +54,10 @@ func (as *Server) Groups(w http.ResponseWriter, r *http.Request) {
 func (as *Server) GroupsSummary(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET":
-		gs, err := models.GetGroupSummaries(ctx.Get(r, "user_id").(int64))
+		gs, err := models.GetGroupSummaries(ctx.Get(r, "user_id").(int64), models.PageParams{})
 		if err != nil {
 			log.Error(err)
-			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		SuccessResponse(w, gs, http.StatusOK)
@@ -69,25 +69,39 @@ func (as *Server) GroupsSummary(w http.ResponseWriter, r *http.Request) {
 func (as *Server) Group(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
-	g, err := models.GetGroup(id, ctx.Get(r, "user_id").(int64))
-	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Group not found"}, http.StatusNotFound)
-		return
-	}
+	uid := ctx.Get(r, "user_id").(int64)
 	switch {
 	case r.Method == "GET":
+		q := r.URL.Query()
+		var g models.Group
+		var err error
+		if q.Get("pageNum") != "" || q.Get("pageSize") != "" {
+			pp := parsePagination(r)
+			g, err = models.GetGroupPaged(id, uid, pp)
+		} else {
+			g, err = models.GetGroup(id, uid)
+		}
+		if err != nil {
+			ErrorResponse(w, "Group not found", http.StatusNotFound)
+			return
+		}
 		SuccessResponse(w, g, http.StatusOK)
 	case r.Method == "DELETE":
+		g, err := models.GetGroup(id, uid)
+		if err != nil {
+			ErrorResponse(w, "Group not found", http.StatusNotFound)
+			return
+		}
 		err = models.DeleteGroup(&g)
 		if err != nil {
 			ErrorResponse(w, "Error deleting group", http.StatusInternalServerError)
 			return
 		}
-		JSONResponse(w, models.Response{Success: true, Message: "Group deleted successfully!"}, http.StatusOK)
+		ActionResponse(w, "Group deleted successfully!", http.StatusOK)
 	case r.Method == "PUT":
 		// Change this to get from URL and uid (don't bother with id in r.Body)
-		g = models.Group{}
-		err = json.NewDecoder(r.Body).Decode(&g)
+		g := models.Group{}
+		err := json.NewDecoder(r.Body).Decode(&g)
 		if err != nil {
 			log.Errorf("error decoding group: %v", err)
 			ErrorResponse(w, err.Error(), http.StatusInternalServerError)
@@ -98,7 +112,7 @@ func (as *Server) Group(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		g.ModifiedDate = time.Now().UTC()
-		g.UserId = ctx.Get(r, "user_id").(int64)
+		g.UserId = uid
 		err = models.PutGroup(&g)
 		if err != nil {
 			ErrorResponse(w, err.Error(), http.StatusBadRequest)

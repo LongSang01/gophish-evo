@@ -21,6 +21,15 @@ type Template struct {
 	Attachments    []Attachment `json:"attachments"`
 }
 
+// TemplateSummary is a lightweight representation of a Template for list views.
+// It excludes heavy fields like HTML, Text, and Attachments.
+type TemplateSummary struct {
+	Id           int64     `json:"id"`
+	Name         string    `json:"name"`
+	Subject      string    `json:"subject"`
+	ModifiedDate time.Time `json:"modified_date"`
+}
+
 // ErrTemplateNameNotSpecified is thrown when a template name is not specified
 var ErrTemplateNameNotSpecified = errors.New("Template name not specified")
 
@@ -81,6 +90,31 @@ func GetTemplates(uid int64, pp PageParams) ([]Template, int64, error) {
 			log.Error(err)
 			return ts, 0, err
 		}
+	}
+	if !pp.Valid() {
+		total = int64(len(ts))
+	}
+	return ts, total, nil
+}
+
+// GetTemplateSummaries returns lightweight template summaries for list views.
+func GetTemplateSummaries(uid int64, pp PageParams) ([]TemplateSummary, int64, error) {
+	ts := []TemplateSummary{}
+	var total int64
+	if pp.Valid() {
+		if err := readDB().Table("templates").Where("user_id=?", uid).Count(&total).Error; err != nil {
+			log.Error(err)
+			return ts, 0, err
+		}
+	}
+	query := readDB().Table("templates").Select("id, name, subject, modified_date").Where("user_id=?", uid).Order("modified_date DESC")
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
+	err := query.Scan(&ts).Error
+	if err != nil {
+		log.Error(err)
+		return ts, 0, err
 	}
 	if !pp.Valid() {
 		total = int64(len(ts))

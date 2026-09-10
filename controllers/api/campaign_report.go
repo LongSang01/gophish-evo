@@ -18,67 +18,67 @@ import (
 // themselves with `go build`.
 func (as *Server) ClientCode(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	vars := mux.Vars(r)
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
 	c, err := models.GetCampaign(id, ctx.Get(r, "user_id").(int64))
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+		ErrorResponse(w, "Campaign not found", http.StatusNotFound)
 		return
 	}
 	if c.SourceType != models.SourceTypeClient {
-		JSONResponse(w, models.Response{Success: false, Message: "Campaign is not a client activity"}, http.StatusBadRequest)
+		ErrorResponse(w, "Campaign is not a client activity", http.StatusBadRequest)
 		return
 	}
 	rc, err := models.GetCampaignReportConfig(&c)
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+		ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	key := models.ReportKey(c.Id, c.ReportSalt)
 	code, err := util.GenerateClientCode(strings.TrimRight(c.URL, "/"), key, rc.DedupKey, c.Id, rc.Fields)
 	if err != nil {
 		log.Error(err)
-		JSONResponse(w, models.Response{Success: false, Message: "Failed to generate client code"}, http.StatusInternalServerError)
+		ErrorResponse(w, "Failed to generate client code", http.StatusInternalServerError)
 		return
 	}
-	JSONResponse(w, models.Response{Success: true, Message: "ok", Data: code}, http.StatusOK)
+	SuccessResponse(w, code, http.StatusOK)
 }
 
 // PageURL returns the fixed URL for a page-type campaign. The server does not
 // generate a QR code; the operator creates one themselves.
 func (as *Server) PageURL(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	vars := mux.Vars(r)
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
 	c, err := models.GetCampaign(id, ctx.Get(r, "user_id").(int64))
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+		ErrorResponse(w, "Campaign not found", http.StatusNotFound)
 		return
 	}
 	if c.SourceType != models.SourceTypePage {
-		JSONResponse(w, models.Response{Success: false, Message: "Campaign is not a fixed page activity"}, http.StatusBadRequest)
+		ErrorResponse(w, "Campaign is not a fixed page activity", http.StatusBadRequest)
 		return
 	}
-	JSONResponse(w, models.Response{Success: true, Message: "ok", Data: c.URL}, http.StatusOK)
+	SuccessResponse(w, c.URL, http.StatusOK)
 }
 
 // CampaignReports returns the report records collected for a campaign.
 func (as *Server) CampaignReports(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	vars := mux.Vars(r)
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
 	// Verify the campaign exists and belongs to the user.
 	if _, err := models.GetCampaign(id, ctx.Get(r, "user_id").(int64)); err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+		ErrorResponse(w, "Campaign not found", http.StatusNotFound)
 		return
 	}
 	pp := parsePagination(r)
@@ -94,19 +94,19 @@ func (as *Server) CampaignReports(w http.ResponseWriter, r *http.Request) {
 // Column set is the union of all dynamic field keys across the records.
 func (as *Server) CampaignReportsExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	vars := mux.Vars(r)
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
 	c, err := models.GetCampaign(id, ctx.Get(r, "user_id").(int64))
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+		ErrorResponse(w, "Campaign not found", http.StatusNotFound)
 		return
 	}
 	reports, _, err := models.GetCampaignReports(id, models.PageParams{})
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+		ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	// The Go client sends a fixed Go-http-client UA, which carries no signal,
@@ -148,18 +148,18 @@ func writeCSVFile(w http.ResponseWriter, baseName, suffix string, fixedKeys []st
 // showing both their submission and click activity.
 func (as *Server) CampaignReportSummary(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	vars := mux.Vars(r)
 	id, _ := strconv.ParseInt(vars["id"], 0, 64)
 	c, err := models.GetCampaign(id, ctx.Get(r, "user_id").(int64))
 	if err != nil {
-		JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+		ErrorResponse(w, "Campaign not found", http.StatusNotFound)
 		return
 	}
 	if c.SourceType != models.SourceTypePage {
-		JSONResponse(w, models.Response{Success: false, Message: "Report summary is only available for page-type campaigns"}, http.StatusBadRequest)
+		ErrorResponse(w, "Report summary is only available for page-type campaigns", http.StatusBadRequest)
 		return
 	}
 	pp := parsePagination(r)

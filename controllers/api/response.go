@@ -45,3 +45,12 @@ func ListResponse(w http.ResponseWriter, items interface{}, total int64, statusC
 		"total":   total,
 	}, statusCode)
 }
+
+// ActionResponse writes {success: true, message: "..."} for action endpoints
+// (delete, launch, complete, etc.).
+func ActionResponse(w http.ResponseWriter, msg string, statusCode int) {
+	JSONResponse(w, map[string]interface{}{
+		"success": true,
+		"message": msg,
+	}, statusCode)
+}

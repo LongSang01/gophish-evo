@@ -20,6 +20,7 @@ type Group struct {
 	Name         string    `json:"name"`
 	ModifiedDate time.Time `json:"modified_date"`
 	Targets      []Target  `json:"targets" gorm:"-"`
+	TotalTargets int64     `json:"total_targets" gorm:"-"`
 }
 
 // GroupSummaries is a struct representing the overview of Groups.
@@ -124,10 +125,19 @@ func GetGroups(uid int64, pp PageParams) ([]Group, int64, error) {
 }
 
 // GetGroupSummaries returns the summaries for the groups
-// created by the given uid.
-func GetGroupSummaries(uid int64) (GroupSummaries, error) {
+// created by the given uid. When pp.Valid() is true the result is paginated.
+func GetGroupSummaries(uid int64, pp PageParams) (GroupSummaries, error) {
 	gs := GroupSummaries{}
-	query := readDB().Table("groups").Where("user_id=?", uid)
+	if pp.Valid() {
+		if err := readDB().Table("groups").Where("user_id=?", uid).Count(&gs.Total).Error; err != nil {
+			log.Error(err)
+			return gs, err
+		}
+	}
+	query := readDB().Table("groups").Where("user_id=?", uid).Order("modified_date DESC")
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
 	err := query.Select("id, name, modified_date").Scan(&gs.Groups).Error
 	if err != nil {
 		log.Error(err)
@@ -140,11 +150,14 @@ func GetGroupSummaries(uid int64) (GroupSummaries, error) {
 			return gs, err
 		}
 	}
-	gs.Total = int64(len(gs.Groups))
+	if !pp.Valid() {
+		gs.Total = int64(len(gs.Groups))
+	}
 	return gs, nil
 }
 
 // GetGroup returns the group, if it exists, specified by the given id and user_id.
+// All targets are loaded.
 func GetGroup(id int64, uid int64) (Group, error) {
 	g := Group{}
 	err := readDB().Where("user_id=? and id=?", uid, id).First(&g).Error
@@ -153,6 +166,22 @@ func GetGroup(id int64, uid int64) (Group, error) {
 		return g, err
 	}
 	g.Targets, err = GetTargets(g.Id)
+	if err != nil {
+		log.Error(err)
+	}
+	g.TotalTargets = int64(len(g.Targets))
+	return g, nil
+}
+
+// GetGroupPaged returns the group with paginated targets.
+func GetGroupPaged(id int64, uid int64, pp PageParams) (Group, error) {
+	g := Group{}
+	err := readDB().Where("user_id=? and id=?", uid, id).First(&g).Error
+	if err != nil {
+		log.Error(err)
+		return g, err
+	}
+	g.Targets, g.TotalTargets, err = GetTargetsPaged(g.Id, pp)
 	if err != nil {
 		log.Error(err)
 	}
@@ -549,4 +578,34 @@ func GetTargets(gid int64) ([]Target, error) {
 	ts := []Target{}
 	err := readDB().Table("targets").Select("targets.id, targets.email, targets.full_name, targets.position").Joins("left join group_targets gt ON targets.id = gt.target_id").Where("gt.group_id=?", gid).Scan(&ts).Error
 	return ts, err
+}
+
+// GetTargetsPaged returns paginated targets for the given group.
+func GetTargetsPaged(gid int64, pp PageParams) ([]Target, int64, error) {
+	ts := []Target{}
+	var total int64
+	base := readDB().Table("targets").
+		Joins("LEFT JOIN group_targets gt ON targets.id = gt.target_id").
+		Where("gt.group_id=?", gid)
+	if pp.Valid() {
+		if err := base.Count(&total).Error; err != nil {
+			return ts, 0, err
+		}
+	}
+	query := readDB().Table("targets").
+		Select("targets.id, targets.email, targets.full_name, targets.position").
+		Joins("LEFT JOIN group_targets gt ON targets.id = gt.target_id").
+		Where("gt.group_id=?", gid).
+		Order("targets.id ASC")
+	if pp.Valid() {
+		query = query.Limit(pp.PageSize).Offset(pp.Offset())
+	}
+	err := query.Scan(&ts).Error
+	if err != nil {
+		return ts, 0, err
+	}
+	if !pp.Valid() {
+		total = int64(len(ts))
+	}
+	return ts, total, nil
 }

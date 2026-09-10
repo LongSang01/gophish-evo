@@ -263,6 +263,7 @@ import {
 } from "@codemirror/autocomplete";
 import {
   getTemplates,
+  getTemplate,
   createTemplate,
   updateTemplate,
   deleteTemplate,
@@ -472,46 +473,56 @@ function assignAttachmentUids(attachments: any[]) {
   return attachments;
 }
 
-function showEditModal(template: any) {
-  editingTemplate.value = template;
-  const hasTracker =
-    template.html &&
-    (template.html.includes("{{.Tracker}}") ||
-      template.html.includes("{{.TrackingUrl}}"));
-  formData.value = {
-    name: template.name,
-    subject: template.subject,
-    envelope_sender: template.envelope_sender || "",
-    html: template.html || "",
-    text: template.text || "",
-    useTracker: hasTracker,
-    attachments: template.attachments
-      ? assignAttachmentUids(template.attachments.map((a: any) => ({ ...a })))
-      : [],
-  };
-  editorKey.value = Date.now();
-  modalVisible.value = true;
+async function showEditModal(template: any) {
+  try {
+    const full = await getTemplate(template.id);
+    editingTemplate.value = full;
+    const hasTracker =
+      full.html &&
+      (full.html.includes("{{.Tracker}}") ||
+        full.html.includes("{{.TrackingUrl}}"));
+    formData.value = {
+      name: full.name,
+      subject: full.subject,
+      envelope_sender: full.envelope_sender || "",
+      html: full.html || "",
+      text: full.text || "",
+      useTracker: hasTracker,
+      attachments: full.attachments
+        ? assignAttachmentUids(full.attachments.map((a: any) => ({ ...a })))
+        : [],
+    };
+    editorKey.value = Date.now();
+    modalVisible.value = true;
+  } catch {
+    message.error("加载模板详情失败");
+  }
 }
 
-function handleDuplicate(template: any) {
-  editingTemplate.value = null;
-  const hasTracker =
-    template.html &&
-    (template.html.includes("{{.Tracker}}") ||
-      template.html.includes("{{.TrackingUrl}}"));
-  formData.value = {
-    name: `${template.name} - 副本`,
-    subject: template.subject,
-    envelope_sender: template.envelope_sender || "",
-    html: template.html || "",
-    text: template.text || "",
-    useTracker: hasTracker,
-    attachments: template.attachments
-      ? assignAttachmentUids(template.attachments.map((a: any) => ({ ...a })))
+async function handleDuplicate(template: any) {
+  try {
+    const full = await getTemplate(template.id);
+    editingTemplate.value = null;
+    const hasTracker =
+      full.html &&
+      (full.html.includes("{{.Tracker}}") ||
+        full.html.includes("{{.TrackingUrl}}"));
+    formData.value = {
+      name: `${full.name} - 副本`,
+      subject: full.subject,
+      envelope_sender: full.envelope_sender || "",
+      html: full.html || "",
+      text: full.text || "",
+      useTracker: hasTracker,
+      attachments: full.attachments
+        ? assignAttachmentUids(full.attachments.map((a: any) => ({ ...a })))
       : [],
-  };
-  editorKey.value = Date.now();
-  modalVisible.value = true;
+    };
+    editorKey.value = Date.now();
+    modalVisible.value = true;
+  } catch {
+    message.error("加载模板详情失败");
+  }
 }
 
 function handleAttachmentUpload(file: File) {
