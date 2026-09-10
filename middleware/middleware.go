@@ -130,7 +130,7 @@ func ApplySecurityHeaders(next http.Handler) http.HandlerFunc {
 // JSONError returns an error in JSON format with the given
 // status code and message
 func JSONError(w http.ResponseWriter, c int, m string) {
-	cj, _ := json.MarshalIndent(models.Response{Success: false, Message: m}, "", "  ")
+	cj, _ := json.MarshalIndent(map[string]interface{}{"success": false, "message": m}, "", "  ")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(c)
 	fmt.Fprintf(w, "%s", cj)

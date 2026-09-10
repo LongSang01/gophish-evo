@@ -8,10 +8,6 @@ export function getGroups(params?: { pageNum?: number; pageSize?: number }): Pro
   return defHttp.get({ url: `${Api.Groups}/`, params });
 }
 
-export function getGroupsSummary(): Promise<any> {
-  return defHttp.get({ url: `${Api.Groups}/summary` });
-}
-
 export function getGroup(id: number): Promise<any> {
   return defHttp.get({ url: `${Api.Groups}/${id}` });
 }

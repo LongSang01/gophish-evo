@@ -513,7 +513,7 @@ import {
 } from "@/api/campaigns";
 import QRCode from "qrcode";
 import { formatDate } from "@/utils/format";
-import { sourceTypeText, sourceTypeColor } from "@/utils/campaign";
+import { sourceTypeText, sourceTypeColor, getStatusColor, getStatusText } from "@/utils/campaign";
 
 const route = useRoute();
 const router = useRouter();
@@ -915,28 +915,6 @@ async function handleComplete() {
       }
     },
   });
-}
-
-function getStatusColor(status: string) {
-  const colors: Record<string, string> = {
-    Completed: "green",
-    "In progress": "blue",
-    Queued: "orange",
-    Scheduled: "cyan",
-    Sending: "purple",
-  };
-  return colors[status] || "default";
-}
-
-function getStatusText(status: string) {
-  const texts: Record<string, string> = {
-    Completed: "已完成",
-    "In progress": "进行中",
-    Queued: "队列中",
-    Scheduled: "已计划",
-    Sending: "发送中",
-  };
-  return texts[status] || status;
 }
 
 function getResultStatusText(status: string) {

@@ -92,30 +92,30 @@ func extractClientIP(r *http.Request) string {
 func (ps *PhishingServer) ReportExtHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	if r.Method != http.MethodPost {
-		api.JSONResponse(w, models.Response{Success: false, Message: "Method not allowed"}, http.StatusMethodNotAllowed)
+		api.ErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	req, err := parseReportRequest(r)
 	if err != nil {
-		api.JSONResponse(w, models.Response{Success: false, Message: "Invalid report request"}, http.StatusBadRequest)
+		api.ErrorResponse(w, "Invalid report request", http.StatusBadRequest)
 		return
 	}
 	c, err := models.GetCampaignForReport(req.CampaignID)
 	if err != nil {
-		api.JSONResponse(w, models.Response{Success: false, Message: "Campaign not found"}, http.StatusNotFound)
+		api.ErrorResponse(w, "Campaign not found", http.StatusNotFound)
 		return
 	}
 	if c.SourceType != models.SourceTypeClient && c.SourceType != models.SourceTypePage {
-		api.JSONResponse(w, models.Response{Success: false, Message: "Campaign does not support reporting"}, http.StatusBadRequest)
+		api.ErrorResponse(w, "Campaign does not support reporting", http.StatusBadRequest)
 		return
 	}
 	if !models.ValidateReportKey(c.Id, c.ReportSalt, req.Key) {
-		api.JSONResponse(w, models.Response{Success: false, Message: http.StatusText(http.StatusUnauthorized)}, http.StatusUnauthorized)
+		api.ErrorResponse(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 	rc, err := models.GetCampaignReportConfig(c)
 	if err != nil {
-		api.JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)
+		api.ErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	ip := extractClientIP(r)
@@ -127,10 +127,10 @@ func (ps *PhishingServer) ReportExtHandler(w http.ResponseWriter, r *http.Reques
 	}
 	if _, err := models.SaveReportExtBatch(c.Id, records, rc, ip, ua, ""); err != nil {
 		log.Error(err)
-		api.JSONResponse(w, models.Response{Success: false, Message: "Failed to store report"}, http.StatusInternalServerError)
+		api.ErrorResponse(w, "Failed to store report", http.StatusInternalServerError)
 		return
 	}
-	api.JSONResponse(w, models.Response{Success: true, Message: "Report received"}, http.StatusOK)
+	api.SuccessResponse(w, map[string]string{"message": "Report received"}, http.StatusOK)
 }
 
 // renderFixedPage serves the HTML of a page-type campaign at its fixed URL.

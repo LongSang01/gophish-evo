@@ -248,7 +248,7 @@ async function handleChangePassword() {
       confirm_password: '',
     };
   } catch (error: any) {
-    message.error(error?.response?.data?.message || error?.message || '密码修改失败');
+    message.error(error?.message || '密码修改失败');
   } finally {
     changingPassword.value = false;
   }
@@ -264,7 +264,7 @@ async function handleSaveIMAP() {
     await saveIMAPSettings(imapForm.value);
     message.success('IMAP设置保存成功');
   } catch (error: any) {
-    message.error(error?.response?.data?.message || error?.message || '保存失败');
+    message.error(error?.message || '保存失败');
   } finally {
     savingIMAP.value = false;
   }
@@ -287,7 +287,7 @@ async function handleValidateIMAP() {
     });
     message.success('IMAP连接测试成功');
   } catch (error: any) {
-    message.error(error?.response?.data?.message || error?.message || '连接测试失败');
+    message.error(error?.message || '连接测试失败');
   } finally {
     validatingIMAP.value = false;
   }

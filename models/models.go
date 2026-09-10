@@ -1,12 +1,9 @@
 package models
 
 import (
-	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"time"
@@ -128,7 +125,6 @@ const InitialAdminApiToken = "GOPHISH_INITIAL_ADMIN_API_TOKEN"
 const (
 	CampaignInProgress string = "In progress"
 	CampaignQueued     string = "Queued"
-	CampaignCreated    string = "Created"
 	CampaignScheduled  string = "Scheduled"
 	CampaignEmailsSent string = "Emails Sent"
 	CampaignComplete   string = "Completed"
@@ -138,34 +134,17 @@ const (
 	EventClicked       string = "Clicked Link"
 	EventDataSubmit    string = "Submitted Data"
 	EventReported      string = "Email Reported"
-	EventProxyRequest  string = "Proxied request"
-	StatusSuccess      string = "Success"
-	StatusQueued       string = "Queued"
 	StatusSending      string = "Sending"
-	StatusUnknown      string = "Unknown"
 	StatusScheduled    string = "Scheduled"
 	StatusRetry        string = "Retrying"
 	Error              string = "Error"
 )
-
-// Flash is used to hold flash information for use in templates.
-type Flash struct {
-	Type    string
-	Message string
-}
 
 // Response contains the attributes found in an API response
 type Response struct {
 	Message string      `json:"message"`
 	Success bool        `json:"success"`
 	Data    interface{} `json:"data"`
-}
-
-// Copy of auth.GenerateSecureKey to prevent cyclic import with auth library
-func generateSecureKey() string {
-	k := make([]byte, 32)
-	io.ReadFull(rand.Reader, k)
-	return fmt.Sprintf("%x", k)
 }
 
 // getDBConnectionString returns the connection string used to open the
@@ -261,7 +240,7 @@ func Setup(c *config.Config) error {
 		switch conf.DBName {
 		case "mysql":
 			rootCertPool := x509.NewCertPool()
-			pem, err := ioutil.ReadFile(conf.DBSSLCaPath)
+			pem, err := os.ReadFile(conf.DBSSLCaPath)
 			if err != nil {
 				log.Error(err)
 				return err

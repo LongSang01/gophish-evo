@@ -283,7 +283,7 @@ async function handleImportSite() {
     importSiteVisible.value = false;
     message.success('站点导入成功');
   } catch (error: any) {
-    message.error(error?.response?.data?.message || error?.message || '导入失败');
+    message.error(error?.message || '导入失败');
   } finally {
     importingSite.value = false;
   }

@@ -276,7 +276,7 @@ async function handleSave() {
     modalVisible.value = false;
     resetPagination();
   } catch (error: any) {
-    message.error(error?.response?.data?.message || error?.message || '保存失败');
+    message.error(error?.message || '保存失败');
   } finally {
     saving.value = false;
   }
@@ -301,7 +301,7 @@ async function handleTestSendConfirm() {
     message.success('测试邮件发送成功');
     testSendVisible.value = false;
   } catch (error: any) {
-    message.error(error?.response?.data?.message || error?.message || '测试邮件发送失败');
+    message.error(error?.message || '测试邮件发送失败');
   } finally {
     testSending.value = false;
   }

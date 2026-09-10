@@ -4,8 +4,6 @@ export interface LoginParams {
 }
 
 export interface LoginResult {
-  success: boolean;
-  message: string;
   token: string;
   user: UserInfo;
 }

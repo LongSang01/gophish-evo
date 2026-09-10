@@ -8,10 +8,6 @@ export function getUsers(params?: { pageNum?: number; pageSize?: number }): Prom
   return defHttp.get({ url: `${Api.Users}/`, params });
 }
 
-export function getUser(id: number): Promise<any> {
-  return defHttp.get({ url: `${Api.Users}/${id}` });
-}
-
 export function createUser(data: any): Promise<any> {
   return defHttp.post({ url: `${Api.Users}/`, data });
 }

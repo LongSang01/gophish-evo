@@ -39,11 +39,6 @@ func parsePagination(r *http.Request) models.PageParams {
 	return models.PageParams{Page: page, PageSize: pageSize}
 }
 
-// pagedJSONResponse writes a {total, data} wrapper for paginated responses.
-func pagedJSONResponse(w http.ResponseWriter, status int, pp models.PageParams, items interface{}, total int64) {
-	ListResponse(w, items, total, status)
-}
-
 // SendTestEmail sends a test email using the template name
 // and Target given.
 func (as *Server) SendTestEmail(w http.ResponseWriter, r *http.Request) {

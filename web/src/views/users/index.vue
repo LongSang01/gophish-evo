@@ -210,7 +210,7 @@ async function handleSave() {
     modalVisible.value = false;
     resetPagination();
   } catch (error: any) {
-    message.error(error?.response?.data?.message || error?.message || '保存失败');
+    message.error(error?.message || '保存失败');
   } finally {
     saving.value = false;
   }

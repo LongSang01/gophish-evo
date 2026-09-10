@@ -594,7 +594,7 @@ async function handleSave() {
     resetPagination();
   } catch (error: any) {
     message.error(
-      error?.response?.data?.message || error?.message || "保存失败",
+      error?.message || "保存失败",
     );
   } finally {
     saving.value = false;
@@ -638,7 +638,7 @@ async function handleTestSendConfirm() {
     testSendVisible.value = false;
   } catch (error: any) {
     message.error(
-      error?.response?.data?.message || error?.message || "测试邮件发送失败",
+      error?.message || "测试邮件发送失败",
     );
   } finally {
     testSending.value = false;
@@ -685,7 +685,7 @@ async function handleImportEmail() {
     message.success("邮件导入成功");
   } catch (error: any) {
     message.error(
-      error?.response?.data?.message || error?.message || "导入失败",
+      error?.message || "导入失败",
     );
   } finally {
     importingEmail.value = false;

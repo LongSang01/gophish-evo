@@ -68,6 +68,8 @@ import { useRouter } from 'vue-router';
 import { message, Modal } from 'ant-design-vue';
 import * as echarts from 'echarts';
 import { getDashboardStats, getCampaignSummaries, deleteCampaign } from '@/api/campaigns';
+import { getStatusColor, getStatusText } from '@/utils/campaign';
+import { formatDate } from '@/utils/format';
 
 const router = useRouter();
 const loading = ref(false);
@@ -261,33 +263,6 @@ function handleDelete(campaign: any) {
       }
     },
   });
-}
-
-function getStatusColor(status: string) {
-  const colors: Record<string, string> = {
-    Completed: 'green',
-    'In progress': 'blue',
-    Queued: 'orange',
-    Scheduled: 'cyan',
-    Sending: 'purple',
-  };
-  return colors[status] || 'default';
-}
-
-function getStatusText(status: string) {
-  const texts: Record<string, string> = {
-    Completed: '已完成',
-    'In progress': '进行中',
-    Queued: '队列中',
-    Scheduled: '已计划',
-    Sending: '发送中',
-  };
-  return texts[status] || status;
-}
-
-function formatDate(date: string) {
-  if (!date || date === '0001-01-01T00:00:00Z') return '-';
-  return new Date(date).toLocaleString('zh-CN');
 }
 </script>
 

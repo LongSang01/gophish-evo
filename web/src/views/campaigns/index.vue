@@ -317,7 +317,10 @@ import {
   sourceTypeColor,
   defaultCampaignForm,
   fillFormFromCampaign,
+  getStatusColor,
+  getStatusText,
 } from "@/utils/campaign";
+import { formatDate } from "@/utils/format";
 
 const router = useRouter();
 const route = useRoute();
@@ -647,9 +650,7 @@ async function handleCreate() {
     createModalVisible.value = false;
     resetPagination();
   } catch (error: any) {
-    message.error(
-      error?.response?.data?.message || error?.message || "创建失败",
-    );
+    message.error(error?.message || "创建失败");
   } finally {
     creating.value = false;
   }
@@ -673,33 +674,6 @@ function handleDelete(id: number) {
       }
     },
   });
-}
-
-function getStatusColor(status: string) {
-  const colors: Record<string, string> = {
-    Completed: "green",
-    "In progress": "blue",
-    Queued: "orange",
-    Scheduled: "cyan",
-    Sending: "purple",
-  };
-  return colors[status] || "default";
-}
-
-function getStatusText(status: string) {
-  const texts: Record<string, string> = {
-    Completed: "已完成",
-    "In progress": "进行中",
-    Queued: "队列中",
-    Scheduled: "已计划",
-    Sending: "发送中",
-  };
-  return texts[status] || status;
-}
-
-function formatDate(date: string) {
-  if (!date || date === "0001-01-01T00:00:00Z") return "-";
-  return new Date(date).toLocaleString("zh-CN");
 }
 </script>
 

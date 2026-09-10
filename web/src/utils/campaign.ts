@@ -119,3 +119,29 @@ export function fillFormFromCampaign(
     fields: (campaign.report_config?.fields || []).map((f: any) => ({ ...f })),
   };
 }
+
+// ── Campaign status display ──────────────────────────────────────────
+
+const STATUS_COLORS: Record<string, string> = {
+  Completed: "green",
+  "In progress": "blue",
+  Queued: "orange",
+  Scheduled: "cyan",
+  Sending: "purple",
+};
+
+const STATUS_TEXTS: Record<string, string> = {
+  Completed: "已完成",
+  "In progress": "进行中",
+  Queued: "队列中",
+  Scheduled: "已计划",
+  Sending: "发送中",
+};
+
+export function getStatusColor(status: string): string {
+  return STATUS_COLORS[status] || "default";
+}
+
+export function getStatusText(status: string): string {
+  return STATUS_TEXTS[status] || status;
+}

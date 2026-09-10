@@ -20,10 +20,3 @@ func (p PageParams) Offset() int {
 	}
 	return (p.Page - 1) * p.PageSize
 }
-
-// PagedResponse wraps a paginated collection along with the total number of
-// matching rows so that clients can render full pagination controls.
-type PagedResponse struct {
-	Total int64       `json:"total"`
-	Data  interface{} `json:"data"`
-}

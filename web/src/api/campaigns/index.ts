@@ -4,13 +4,6 @@ enum Api {
   Campaigns = "/campaigns",
 }
 
-export function getCampaigns(params?: {
-  pageNum?: number;
-  pageSize?: number;
-}): Promise<any> {
-  return defHttp.get({ url: `${Api.Campaigns}/`, params });
-}
-
 export function getCampaignSummaries(params?: {
   pageNum?: number;
   pageSize?: number;
